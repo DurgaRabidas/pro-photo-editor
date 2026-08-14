@@ -12,31 +12,33 @@
         background: #222;
         color: white;
         margin: 0;
-        padding-bottom: 80px; /* toolbar ke liye jagah */
+        padding-bottom: 80px;
         text-align: center;
     }
     #canvas-container {
         overflow: auto;
-        max-height: 50vh;
+        height: 50vh;
         background: #000;
         margin: 10px;
         border-radius: 10px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
     }
     canvas {
         background: #000;
-        margin: 0;
         border-radius: 10px;
-        transform-origin: 0 0;
         max-width: 100%;
+        max-height: 100%;
     }
-   .toolbar {
+  .toolbar {
         display: flex;
         flex-wrap: wrap;
         justify-content: center;
         gap: 8px;
         padding: 10px;
         background: #333;
-        position: fixed; /* Neeche chipka do */
+        position: fixed;
         bottom: 0;
         left: 0;
         right: 0;
@@ -80,32 +82,38 @@
         <button onclick="filter('sepia(100%)')">Sepia</button>
         <button onclick="filter('blur(3px)')">Blur</button>
         <button onclick="download()">Save</button>
-        <button onclick="share()">Share</button>
     </div>
 
 <script>
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
-const container = document.getElementById('canvas-container');
 let history = [];
 let currentStep = -1;
 let scale = 1;
+let originalImage = null;
 
 document.getElementById('upload').onchange = e => {
     const reader = new FileReader();
     reader.onload = event => {
-        const img = new Image();
-        img.onload = () => {
-            canvas.width = img.width;
-            canvas.height = img.height;
-            ctx.drawImage(img, 0, 0);
-            scale = 1;
-            canvas.style.transform = `scale(${scale})`;
+        originalImage = new Image();
+        originalImage.onload = () => {
+            drawImage(); // pehle image draw karo
             saveState();
         }
-        img.src = event.target.result;
+        originalImage.src = event.target.result;
     }
     reader.readAsDataURL(e.target.files[0]);
+}
+
+// EK HI JAGAH SE IMAGE DRAW HOGI
+function drawImage(){
+    canvas.width = originalImage.width;
+    canvas.height = originalImage.height;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.save();
+    ctx.scale(scale, scale);
+    ctx.drawImage(originalImage, 0, 0);
+    ctx.restore();
 }
 
 function saveState() {
@@ -124,30 +132,13 @@ function loadState(step){
     let img = new Image();
     img.src = history[step];
     img.onload = () => {
-        canvas.width = img.width;
-        canvas.height = img.height;
-        ctx.drawImage(img,0,0);
+        originalImage = img; // original ko update karo
+        scale = 1;
+        drawImage();
     }
 }
 
 function undo() {
     if(currentStep > 0){
         currentStep--;
-        loadState(currentStep);
-        updateButtons();
-    }
-}
-
-function redo() {
-    if(currentStep < history.length - 1){
-        currentStep++;
-        loadState(currentStep);
-        updateButtons();
-    }
-}
-
-function zoom(factor){
-    scale *= factor;
-    if(scale < 0.5) scale = 0.5;
-    if(scale > 4) scale = 4;
-    canvas.style.transform =
+        loadState(currentStep

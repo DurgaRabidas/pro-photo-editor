@@ -2,16 +2,56 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pro Photo Editor</title>
 <meta name="theme-color" content="#222">
 <link rel="manifest" href="manifest.json">
 <style>
-    body { font-family: Arial; background: #222; color: white; margin: 0; text-align: center; overflow: hidden; }
-    #canvas-container { overflow: auto; max-height: 55vh; background: #000; margin: 10px; border-radius: 10px; }
-    canvas { background: #000; margin: 0; border-radius: 10px; transform-origin: 0 0; }
-   .toolbar { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 10px; }
-    button, input { padding: 10px 12px; border: none; border-radius: 8px; background: #4CAF50; color: white; font-weight: bold; cursor: pointer; font-size: 14px; }
+    body {
+        font-family: Arial;
+        background: #222;
+        color: white;
+        margin: 0;
+        padding-bottom: 80px; /* toolbar ke liye jagah */
+        text-align: center;
+    }
+    #canvas-container {
+        overflow: auto;
+        max-height: 50vh;
+        background: #000;
+        margin: 10px;
+        border-radius: 10px;
+    }
+    canvas {
+        background: #000;
+        margin: 0;
+        border-radius: 10px;
+        transform-origin: 0 0;
+        max-width: 100%;
+    }
+   .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px;
+        background: #333;
+        position: fixed; /* Neeche chipka do */
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 100;
+    }
+    button, input {
+        padding: 10px 12px;
+        border: none;
+        border-radius: 8px;
+        background: #4CAF50;
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+        font-size: 14px;
+    }
     button:active { background: #45a049; }
     button:disabled { background: #555; }
     h2 { margin: 10px; }
@@ -51,7 +91,6 @@ let history = [];
 let currentStep = -1;
 let scale = 1;
 
-// UPLOAD PHOTO
 document.getElementById('upload').onchange = e => {
     const reader = new FileReader();
     reader.onload = event => {
@@ -69,7 +108,6 @@ document.getElementById('upload').onchange = e => {
     reader.readAsDataURL(e.target.files[0]);
 }
 
-// UNDO REDO SYSTEM
 function saveState() {
     history = history.slice(0, currentStep + 1);
     history.push(canvas.toDataURL());
@@ -108,94 +146,8 @@ function redo() {
     }
 }
 
-// ZOOM
 function zoom(factor){
     scale *= factor;
     if(scale < 0.5) scale = 0.5;
     if(scale > 4) scale = 4;
-    canvas.style.transform = `scale(${scale})`;
-}
-
-// PINCH ZOOM
-let touchStartDistance = 0;
-container.addEventListener('touchstart', e => {
-    if(e.touches.length === 2){
-        touchStartDistance = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-    }
-});
-container.addEventListener('touchmove', e => {
-    if(e.touches.length === 2){
-        e.preventDefault();
-        let touchEndDistance = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-        zoom(touchEndDistance / touchStartDistance);
-        touchStartDistance = touchEndDistance;
-    }
-});
-
-// ROTATE + FLIP
-function rotate(){
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = canvas.height;
-    tempCanvas.height = canvas.width;
-    const tempCtx = tempCanvas.getContext('2d');
-    tempCtx.translate(tempCanvas.width/2, tempCanvas.height/2);
-    tempCtx.rotate(90 * Math.PI/180);
-    tempCtx.drawImage(canvas, -canvas.width/2, -canvas.height/2);
-    canvas.width = tempCanvas.width;
-    canvas.height = tempCanvas.height;
-    ctx.drawImage(tempCanvas, 0, 0);
-    saveState();
-}
-
-function flip(){
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = canvas.width;
-    tempCanvas.height = canvas.height;
-    const tempCtx = tempCanvas.getContext('2d');
-    tempCtx.translate(canvas.width, 0);
-    tempCtx.scale(-1, 1);
-    tempCtx.drawImage(canvas, 0, 0);
-    ctx.drawImage(tempCanvas, 0, 0);
-    saveState();
-}
-
-// BRIGHTNESS + CONTRAST
-function adjust(b,c){
-    let imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
-    let data = imageData.data;
-    for(let i=0; i<data.length; i+=4){
-        data[i] = Math.min(255, Math.max(0, data[i] + b + (data[i]-128)*c/100));
-        data[i+1] = Math.min(255, Math.max(0, data[i+1] + b + (data[i+1]-128)*c/100));
-        data[i+2] = Math.min(255, Math.max(0, data[i+2] + b + (data[i+2]-128)*c/100));
-    }
-    ctx.putImageData(imageData,0,0);
-    saveState();
-}
-
-// FILTERS
-function filter(type){
-    ctx.filter = type;
-    ctx.drawImage(canvas,0,0);
-    ctx.filter = 'none';
-    saveState();
-}
-
-// SAVE + SHARE
-function download(){
-    const link = document.createElement('a');
-    link.download = 'edited.jpg';
-    link.href = canvas.toDataURL("image/jpeg", 0.9);
-    link.click();
-}
-
-async function share(){
-    const blob = await (await fetch(canvas.toDataURL())).blob();
-    const file = new File([blob], "image.jpg", {type: "image/jpeg"});
-    if(navigator.share) navigator.share({files: [file]});
-}
-
-// PWA
-if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js'); }
-</script>
-</body>
-</html>
+    canvas.style.transform =

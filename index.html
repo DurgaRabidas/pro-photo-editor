@@ -5,33 +5,51 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Photo Editor</title>
 <style>
-    body { background: #222; color: white; margin: 0; text-align: center; font-family: Arial; }
-    #canvas { background: #000; max-width: 100%; margin: 10px 0; }
-   .toolbar { padding: 10px; background: #333; }
-    button { padding: 10px; margin: 5px; background: #4CAF50; color: white; border: none; border-radius: 5px; font-weight: bold; }
+    body { background: #222; color: white; margin: 0; text-align: center; font-family: Arial; padding-bottom: 120px; }
+    #canvas { background: #000; max-width: 95%; margin: 10px auto; display: block; }
+  .toolbar {
+        padding: 10px;
+        background: #333;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    button { padding: 10px 12px; margin: 4px; background: #4CAF50; color: white; border: none; border-radius: 5px; font-weight: bold; font-size: 13px; }
+    button:disabled { background: #555; }
     input { margin: 10px; }
 </style>
 </head>
 <body>
     <h2>Photo Editor</h2>
     <input type="file" id="upload" accept="image/*">
-    <br>
     <canvas id="canvas"></canvas>
-    <br>
 
     <div class="toolbar">
+        <button onclick="undo()" id="undoBtn" disabled>Undo</button>
+        <button onclick="redo()" id="redoBtn" disabled>Redo</button>
         <button onclick="zoom(1.2)">Zoom +</button>
         <button onclick="zoom(0.8)">Zoom -</button>
+        <button onclick="rotate()">Rotate</button>
+        <button onclick="flip()">Flip</button>
         <button onclick="adjust(20,0)">B+</button>
         <button onclick="adjust(-20,0)">B-</button>
         <button onclick="adjust(0,20)">C+</button>
         <button onclick="adjust(0,-20)">C-</button>
+        <button onclick="filter('grayscale(100%)')">Gray</button>
+        <button onclick="filter('sepia(100%)')">Sepia</button>
+        <button onclick="filter('blur(3px)')">Blur</button>
         <button onclick="download()">Save</button>
     </div>
 
 <script>
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
+let history = [];
+let step = -1;
 let img = new Image();
 let scale = 1;
 
@@ -42,6 +60,7 @@ document.getElementById('upload').onchange = function(e) {
             canvas.width = img.width;
             canvas.height = img.height;
             draw();
+            save();
         }
         img.src = event.target.result;
     }
@@ -56,6 +75,31 @@ function draw() {
     ctx.restore();
 }
 
+function save() {
+    history = history.slice(0, step + 1);
+    history.push(canvas.toDataURL());
+    step++;
+    document.getElementById('undoBtn').disabled = step <= 0;
+    document.getElementById('redoBtn').disabled = step >= history.length - 1;
+}
+
+function load(s) {
+    let newImg = new Image();
+    newImg.src = history[s];
+    newImg.onload = function() {
+        img = newImg;
+        scale = 1;
+        draw();
+    }
+}
+
+function undo() {
+    if(step > 0) { step--; load(step); document.getElementById('undoBtn').disabled = step <= 0; document.getElementById('redoBtn').disabled = false; }
+}
+function redo() {
+    if(step < history.length - 1) { step++; load(step); document.getElementById('redoBtn').disabled = step >= history.length - 1; document.getElementById('undoBtn').disabled = false; }
+}
+
 function zoom(f) {
     scale = scale * f;
     if(scale < 0.5) scale = 0.5;
@@ -63,33 +107,24 @@ function zoom(f) {
     draw();
 }
 
+function rotate() {
+    let t = document.createElement('canvas');
+    t.width = canvas.height; t.height = canvas.width;
+    let tctx = t.getContext('2d');
+    tctx.translate(t.width/2, t.height/2); tctx.rotate(90*Math.PI/180);
+    tctx.drawImage(canvas, -canvas.width/2, -canvas.height/2);
+    img.src = t.toDataURL(); img.onload = () => { canvas.width = img.width; canvas.height = img.height; draw(); save(); }
+}
+
+function flip() {
+    let t = document.createElement('canvas');
+    t.width = canvas.width; t.height = canvas.height;
+    let tctx = t.getContext('2d');
+    tctx.translate(canvas.width, 0); tctx.scale(-1, 1);
+    tctx.drawImage(canvas, 0, 0);
+    img.src = t.toDataURL(); img.onload = () => { draw(); save(); }
+}
+
 function adjust(b, c) {
-    let tempCanvas = document.createElement('canvas');
-    tempCanvas.width = canvas.width;
-    tempCanvas.height = canvas.height;
-    let tempCtx = tempCanvas.getContext('2d');
-    tempCtx.drawImage(canvas, 0, 0);
-
-    let imageData = tempCtx.getImageData(0,0,canvas.width,canvas.height);
-    let data = imageData.data;
-    for(let i=0; i<data.length; i+=4){
-        data[i] = data[i] + b + (data[i]-128)*c/100;
-        data[i+1] = data[i+1] + b + (data[i+1]-128)*c/100;
-        data[i+2] = data[i+2] + b + (data[i+2]-128)*c/100;
-    }
-    tempCtx.putImageData(imageData,0,0);
-
-    img = new Image();
-    img.src = tempCanvas.toDataURL();
-    img.onload = draw;
-}
-
-function download() {
-    let link = document.createElement('a');
-    link.download = 'photo.jpg';
-    link.href = canvas.toDataURL();
-    link.click();
-}
-</script>
-</body>
-</html>
+    let t = document.createElement('canvas'); t.width = canvas.width; t.height = canvas.height;
+    let tctx = t.getContext('2d'); tctx.drawImage(canvas, 0, 0);

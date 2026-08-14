@@ -3,142 +3,93 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pro Photo Editor</title>
-<meta name="theme-color" content="#222">
-<link rel="manifest" href="manifest.json">
+<title>Photo Editor</title>
 <style>
-    body {
-        font-family: Arial;
-        background: #222;
-        color: white;
-        margin: 0;
-        padding-bottom: 80px;
-        text-align: center;
-    }
-    #canvas-container {
-        overflow: auto;
-        height: 50vh;
-        background: #000;
-        margin: 10px;
-        border-radius: 10px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-    }
-    canvas {
-        background: #000;
-        border-radius: 10px;
-        max-width: 100%;
-        max-height: 100%;
-    }
-  .toolbar {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 8px;
-        padding: 10px;
-        background: #333;
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        z-index: 100;
-    }
-    button, input {
-        padding: 10px 12px;
-        border: none;
-        border-radius: 8px;
-        background: #4CAF50;
-        color: white;
-        font-weight: bold;
-        cursor: pointer;
-        font-size: 14px;
-    }
-    button:active { background: #45a049; }
-    button:disabled { background: #555; }
-    h2 { margin: 10px; }
+    body { background: #222; color: white; margin: 0; text-align: center; font-family: Arial; }
+    #canvas { background: #000; max-width: 100%; margin: 10px 0; }
+   .toolbar { padding: 10px; background: #333; }
+    button { padding: 10px; margin: 5px; background: #4CAF50; color: white; border: none; border-radius: 5px; font-weight: bold; }
+    input { margin: 10px; }
 </style>
 </head>
 <body>
-    <h2>Pro Photo Editor</h2>
+    <h2>Photo Editor</h2>
     <input type="file" id="upload" accept="image/*">
-
-    <div id="canvas-container">
-        <canvas id="canvas"></canvas>
-    </div>
+    <br>
+    <canvas id="canvas"></canvas>
+    <br>
 
     <div class="toolbar">
-        <button onclick="undo()" id="undoBtn" disabled>Undo</button>
-        <button onclick="redo()" id="redoBtn" disabled>Redo</button>
         <button onclick="zoom(1.2)">Zoom +</button>
         <button onclick="zoom(0.8)">Zoom -</button>
-        <button onclick="rotate()">Rotate</button>
-        <button onclick="flip()">Flip</button>
         <button onclick="adjust(20,0)">B+</button>
         <button onclick="adjust(-20,0)">B-</button>
         <button onclick="adjust(0,20)">C+</button>
         <button onclick="adjust(0,-20)">C-</button>
-        <button onclick="filter('grayscale(100%)')">Gray</button>
-        <button onclick="filter('sepia(100%)')">Sepia</button>
-        <button onclick="filter('blur(3px)')">Blur</button>
         <button onclick="download()">Save</button>
     </div>
 
 <script>
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
-let history = [];
-let currentStep = -1;
+let img = new Image();
 let scale = 1;
-let originalImage = null;
 
-document.getElementById('upload').onchange = e => {
+document.getElementById('upload').onchange = function(e) {
     const reader = new FileReader();
-    reader.onload = event => {
-        originalImage = new Image();
-        originalImage.onload = () => {
-            drawImage(); // pehle image draw karo
-            saveState();
+    reader.onload = function(event) {
+        img.onload = function() {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            draw();
         }
-        originalImage.src = event.target.result;
+        img.src = event.target.result;
     }
     reader.readAsDataURL(e.target.files[0]);
 }
 
-// EK HI JAGAH SE IMAGE DRAW HOGI
-function drawImage(){
-    canvas.width = originalImage.width;
-    canvas.height = originalImage.height;
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
     ctx.scale(scale, scale);
-    ctx.drawImage(originalImage, 0, 0);
+    ctx.drawImage(img, 0, 0);
     ctx.restore();
 }
 
-function saveState() {
-    history = history.slice(0, currentStep + 1);
-    history.push(canvas.toDataURL());
-    currentStep++;
-    updateButtons();
+function zoom(f) {
+    scale = scale * f;
+    if(scale < 0.5) scale = 0.5;
+    if(scale > 3) scale = 3;
+    draw();
 }
 
-function updateButtons(){
-    document.getElementById('undoBtn').disabled = currentStep <= 0;
-    document.getElementById('redoBtn').disabled = currentStep >= history.length - 1;
-}
+function adjust(b, c) {
+    let tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    let tempCtx = tempCanvas.getContext('2d');
+    tempCtx.drawImage(canvas, 0, 0);
 
-function loadState(step){
-    let img = new Image();
-    img.src = history[step];
-    img.onload = () => {
-        originalImage = img; // original ko update karo
-        scale = 1;
-        drawImage();
+    let imageData = tempCtx.getImageData(0,0,canvas.width,canvas.height);
+    let data = imageData.data;
+    for(let i=0; i<data.length; i+=4){
+        data[i] = data[i] + b + (data[i]-128)*c/100;
+        data[i+1] = data[i+1] + b + (data[i+1]-128)*c/100;
+        data[i+2] = data[i+2] + b + (data[i+2]-128)*c/100;
     }
+    tempCtx.putImageData(imageData,0,0);
+
+    img = new Image();
+    img.src = tempCanvas.toDataURL();
+    img.onload = draw;
 }
 
-function undo() {
-    if(currentStep > 0){
-        currentStep--;
-        loadState(currentStep
+function download() {
+    let link = document.createElement('a');
+    link.download = 'photo.jpg';
+    link.href = canvas.toDataURL();
+    link.click();
+}
+</script>
+</body>
+</html>

@@ -5,26 +5,43 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Photo Editor</title>
 <style>
-    body { background: #222; color: white; margin: 0; text-align: center; font-family: Arial; }
-    #canvas { background: #000; max-width: 100%; margin: 10px 0; }
-   .toolbar { padding: 10px; background: #333; }
-    button { padding: 10px; margin: 5px; background: #4CAF50; color: white; border: none; border-radius: 5px; font-weight: bold; }
+    body { background: #222; color: white; margin: 0; text-align: center; font-family: Arial; padding-bottom: 140px; }
+    #canvas { background: #000; max-width: 95%; max-height: 60vh; margin: 10px auto; display: block; border-radius: 10px; }
+ .toolbar {
+        padding: 10px;
+        background: #333;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 6px;
+    }
+    button { padding: 10px 14px; background: #4CAF50; color: white; border: none; border-radius: 6px; font-weight: bold; font-size: 14px; }
+    button:active { background: #45a049; }
+    input { margin: 10px; }
 </style>
 </head>
 <body>
     <h2>Photo Editor</h2>
     <input type="file" id="upload" accept="image/*">
-    <br>
     <canvas id="canvas"></canvas>
-    <br>
 
     <div class="toolbar">
         <button onclick="zoom(1.2)">Zoom +</button>
         <button onclick="zoom(0.8)">Zoom -</button>
-        <button onclick="bright(20)">B+</button>
-        <button onclick="bright(-20)">B-</button>
-        <button onclick="contrast(20)">C+</button>
-        <button onclick="contrast(-20)">C-</button>
+        <button onclick="rotate()">Rotate</button>
+        <button onclick="flip()">Flip</button>
+        <button onclick="setFilter('brightness(120%)')">B+</button>
+        <button onclick="setFilter('brightness(80%)')">B-</button>
+        <button onclick="setFilter('contrast(120%)')">C+</button>
+        <button onclick="setFilter('contrast(80%)')">C-</button>
+        <button onclick="setFilter('grayscale(100%)')">Gray</button>
+        <button onclick="setFilter('sepia(100%)')">Sepia</button>
+        <button onclick="setFilter('blur(3px)')">Blur</button>
+        <button onclick="reset()">Reset</button>
         <button onclick="saveImg()">Save</button>
     </div>
 
@@ -33,13 +50,21 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 let originalImg = new Image();
 let currentScale = 1;
+let currentFilter = 'none';
+let rotation = 0;
+let flipped = 1;
 
 document.getElementById('upload').onchange = function(e) {
     let file = e.target.files[0];
-    let url = URL.createObjectURL(file); // Ye sabse fast tarika hai
+    if(!file) return;
+    let url = URL.createObjectURL(file);
     originalImg.onload = function() {
         canvas.width = originalImg.width;
         canvas.height = originalImg.height;
+        currentScale = 1;
+        currentFilter = 'none';
+        rotation = 0;
+        flipped = 1;
         draw();
     }
     originalImg.src = url;
@@ -47,32 +72,64 @@ document.getElementById('upload').onchange = function(e) {
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(originalImg, 0, 0, canvas.width*currentScale, canvas.height*currentScale);
+    ctx.save();
+    ctx.filter = currentFilter;
+
+    // Center se zoom + rotate + flip
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.scale(flipped * currentScale, currentScale);
+    ctx.rotate(rotation * Math.PI/180);
+    ctx.drawImage(originalImg, -originalImg.width/2, -originalImg.height/2);
+
+    ctx.restore();
 }
 
 function zoom(f) {
     currentScale = currentScale * f;
     if(currentScale < 0.5) currentScale = 0.5;
-    if(currentScale > 3) currentScale = 3;
+    if(currentScale > 4) currentScale = 4;
     draw();
 }
 
-function bright(val) {
-    ctx.filter = `brightness(${100 + val}%)`;
+function rotate() {
+    rotation = rotation + 90;
+    if(rotation >= 360) rotation = 0;
     draw();
-    ctx.filter = 'none';
 }
 
-function contrast(val) {
-    ctx.filter = `contrast(${100 + val}%)`;
+function flip() {
+    flipped = flipped * -1;
     draw();
-    ctx.filter = 'none';
+}
+
+function setFilter(f) {
+    currentFilter = f;
+    draw();
+}
+
+function reset() {
+    currentScale = 1;
+    currentFilter = 'none';
+    rotation = 0;
+    flipped = 1;
+    draw();
 }
 
 function saveImg() {
+    // Save ke time filter + transform apply karna hai
+    let tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    let tctx = tempCanvas.getContext('2d');
+    tctx.filter = currentFilter;
+    tctx.translate(canvas.width/2, canvas.height/2);
+    tctx.scale(flipped * currentScale, currentScale);
+    tctx.rotate(rotation * Math.PI/180);
+    tctx.drawImage(originalImg, -originalImg.width/2, -originalImg.height/2);
+
     let a = document.createElement('a');
-    a.download = 'photo.jpg';
-    a.href = canvas.toDataURL();
+    a.download = 'edited.jpg';
+    a.href = tempCanvas.toDataURL('image/jpeg', 0.9);
     a.click();
 }
 </script>

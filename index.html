@@ -2,20 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Photo Editor Pro</title>
 <style>
     * { box-sizing: border-box; }
-    body { background: #121212; color: #eee; margin: 0; font-family: system-ui; overflow: hidden; }
-    h2 { margin: 10px 0; text-align: center; }
+    body { background: #121212; color: #eee; margin: 0; font-family: system-ui, -apple-system, sans-serif; overflow: hidden; }
+    h2 { margin: 10px 0; text-align: center; font-size: 18px; }
 
-  .main-wrap {
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
-        height: 100dvh;
-    }
-
+  .main-wrap { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
   .canvas-wrap {
         flex: 1;
         display: flex;
@@ -26,55 +20,53 @@
         overflow: auto;
         background: #000;
     }
-    #canvas { max-width: 100%; max-height: 100%; border-radius: 12px; }
+    #canvas { border-radius: 12px; background: #000; display: block; }
 
     #upload-label {
         position: absolute;
-        padding: 15px 30px;
+        padding: 16px 32px;
         background: #4CAF50;
         color: white;
-        border-radius: 10px;
+        border-radius: 12px;
         font-weight: bold;
         cursor: pointer;
         font-size: 16px;
         z-index: 10;
+        box-shadow: 0 4px 15px rgba(76,175,80,0.3);
     }
-    #upload-label:hover { background: #45a049; }
+    #upload-label:active { transform: scale(0.95); }
     #upload { display: none; }
 
   .toolbar {
         background: #1f1f1f;
         padding: 10px;
         display: grid;
-        grid-auto-flow: column; /* landscape me side scroll */
-        grid-auto-columns: minmax(75px, 1fr);
+        grid-auto-flow: column;
+        grid-auto-columns: 80px;
         gap: 8px;
         overflow-x: auto;
         border-top: 1px solid #333;
         flex-shrink: 0;
     }
-   .toolbar::-webkit-scrollbar { height: 5px; }
-   .toolbar::-webkit-scrollbar-thumb { background: #555; border-radius: 5px; }
-
-    button { padding: 12px 8px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 12px; white-space: nowrap; }
-    button:disabled { background: #444; color: #777; }
-    button:active { transform: scale(0.95); }
+   .toolbar::-webkit-scrollbar { height: 4px; }
+   .toolbar::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+    button { padding: 12px 6px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 11px; white-space: nowrap; }
+    button:disabled { background: #3a3a3a; color: #666; }
+    button:active { transform: scale(0.92); }
 </style>
 </head>
 <body>
     <div class="main-wrap">
         <h2>📷 Photo Editor Pro</h2>
-
         <div class="canvas-wrap">
             <label for="upload" id="upload-label">📁 Choose Image</label>
             <input type="file" id="upload" accept="image/*">
             <canvas id="canvas"></canvas>
         </div>
-
         <div class="toolbar">
             <button onclick="undo()" id="undoBtn" disabled>↩️ Undo</button>
             <button onclick="redo()" id="redoBtn" disabled>↪️ Redo</button>
-            <button onclick="zoom(1.2)">🔍 +</button>
+            <button onclick="zoom(1.25)">🔍 +</button>
             <button onclick="zoom(0.8)">🔍 -</button>
             <button onclick="rotate()">🔄 Rotate</button>
             <button onclick="flip()">↔️ Flip</button>
@@ -86,99 +78,3 @@
             <button onclick="setFilter('sepia(100%)')">Sepia</button>
             <button onclick="setFilter('blur(2px)')">Blur</button>
             <button onclick="reset()">Reset</button>
-            <button onclick="saveImg()">💾 Save</button>
-        </div>
-    </div>
-
-<script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const uploadLabel = document.getElementById('upload-label');
-let history = [];
-let step = -1;
-
-let img = new Image();
-let state = {scale: 1, filter: 'none', rotation: 0, flipped: 1};
-
-document.getElementById('upload').onchange = (e) => {
-    const file = e.target.files[0];
-    if(!file) return;
-    img.onload = () => {
-        uploadLabel.style.display = 'none';
-
-        const wrap = document.querySelector('.canvas-wrap');
-        const ratio = Math.min(wrap.clientWidth / img.width, wrap.clientHeight / img.height, 1);
-        canvas.width = img.width * ratio;
-        canvas.height = img.height * ratio;
-
-        resetState();
-        pushState();
-    }
-    img.src = URL.createObjectURL(file);
-}
-
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.save();
-    ctx.filter = state.filter;
-    ctx.translate(canvas.width/2, canvas.height/2);
-    ctx.scale(state.flipped * state.scale, state.scale);
-    ctx.rotate(state.rotation * Math.PI / 180);
-    ctx.drawImage(img, -img.width/2, -img.height/2);
-    ctx.restore();
-}
-
-function pushState() {
-    if(step < history.length - 1) history.length = step + 1;
-    history.push({...state});
-    step++;
-    updateBtns();
-}
-
-function restoreState(s) {
-    state = {...history[s]};
-    draw();
-    updateBtns();
-}
-
-function updateBtns() {
-    document.getElementById('undoBtn').disabled = step <= 0;
-    document.getElementById('redoBtn').disabled = step >= history.length - 1;
-}
-
-function undo() { if(step > 0) { step--; restoreState(step); } }
-function redo() { if(step < history.length - 1) { step++; restoreState(step); } }
-
-function zoom(f) {
-    const newScale = state.scale * f;
-    if(newScale >= 0.5 && newScale <= 5) {
-        state.scale = newScale;
-        draw();
-        pushState();
-    }
-}
-function rotate() { state.rotation = (state.rotation + 90) % 360; draw(); pushState(); }
-function flip() { state.flipped *= -1; draw(); pushState(); }
-function setFilter(f) { state.filter = f; draw(); pushState(); }
-function resetState() { state = {scale: 1, filter: 'none', rotation: 0, flipped: 1}; draw(); }
-function reset() { resetState(); pushState(); }
-
-function saveImg() {
-    if(!img.src) return alert("Pehle image select karo");
-    const temp = document.createElement('canvas');
-    temp.width = img.width;
-    temp.height = img.height;
-    const tctx = temp.getContext('2d');
-    tctx.filter = state.filter;
-    tctx.translate(temp.width/2, temp.height/2);
-    tctx.scale(state.flipped * state.scale, state.scale);
-    tctx.rotate(state.rotation * Math.PI / 180);
-    tctx.drawImage(img, -img.width/2, -img.height/2);
-    const link = document.createElement('a');
-    link.download = 'edited-photo.jpg';
-    link.href = temp.toDataURL('image/jpeg', 0.95);
-    link.click();
-}
-</script>
-</body>
-</html>

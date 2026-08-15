@@ -2,15 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Photo Editor Pro</title>
 <style>
     * { box-sizing: border-box; }
-    body { background: #121212; color: #eee; margin: 0; font-family: system-ui, -apple-system, sans-serif; overflow: hidden; }
-    h2 { margin: 10px 0; text-align: center; font-size: 18px; }
+    body { background: #121212; color: #eee; margin: 0; font-family: system-ui; }
+    h2 { margin: 10px 0; text-align: center; }
 
-  .main-wrap { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
-  .canvas-wrap {
+.main-wrap { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+.canvas-wrap {
         flex: 1;
         display: flex;
         justify-content: center;
@@ -19,8 +19,9 @@
         padding: 10px;
         overflow: auto;
         background: #000;
+        min-height: 250px;
     }
-    #canvas { border-radius: 12px; background: #000; display: block; }
+    #canvas { border-radius: 12px; background: #111; max-width: 100%; max-height: 100%; }
 
     #upload-label {
         position: absolute;
@@ -32,12 +33,10 @@
         cursor: pointer;
         font-size: 16px;
         z-index: 10;
-        box-shadow: 0 4px 15px rgba(76,175,80,0.3);
     }
-    #upload-label:active { transform: scale(0.95); }
     #upload { display: none; }
 
-  .toolbar {
+.toolbar {
         background: #1f1f1f;
         padding: 10px;
         display: grid;
@@ -46,13 +45,9 @@
         gap: 8px;
         overflow-x: auto;
         border-top: 1px solid #333;
-        flex-shrink: 0;
     }
-   .toolbar::-webkit-scrollbar { height: 4px; }
-   .toolbar::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
-    button { padding: 12px 6px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 11px; white-space: nowrap; }
+    button { padding: 12px 6px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 11px; }
     button:disabled { background: #3a3a3a; color: #666; }
-    button:active { transform: scale(0.92); }
 </style>
 </head>
 <body>
@@ -78,3 +73,103 @@
             <button onclick="setFilter('sepia(100%)')">Sepia</button>
             <button onclick="setFilter('blur(2px)')">Blur</button>
             <button onclick="reset()">Reset</button>
+            <button onclick="saveImg()">💾 Save</button>
+        </div>
+    </div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const uploadLabel = document.getElementById('upload-label');
+let history = [];
+let step = -1;
+let img = new Image();
+let state = {scale: 1, filter: 'none', rotation: 0, flipped: 1};
+
+function getDisplaySize() {
+    if(!img.src) return {width: 300, height: 300}; // default size
+    let w = img.width;
+    let h = img.height;
+    if(state.rotation % 180!== 0) [w, h] = [h, w];
+    const wrap = document.querySelector('.canvas-wrap');
+    const ratio = Math.min(wrap.clientWidth / w, wrap.clientHeight / h, 1);
+    return { width: w * ratio, height: h * ratio };
+}
+
+function fitCanvas() {
+    const size = getDisplaySize();
+    canvas.width = size.width;
+    canvas.height = size.height;
+}
+
+document.getElementById('upload').onchange = (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    img.onload = () => {
+        uploadLabel.style.display = 'none';
+        fitCanvas();
+        resetState();
+        pushState();
+    }
+    img.src = URL.createObjectURL(file);
+}
+
+function draw() {
+    if(!img.src) return;
+    fitCanvas();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.filter = state.filter;
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.scale(state.flipped * state.scale, state.scale);
+    ctx.rotate(state.rotation * Math.PI / 180);
+    ctx.drawImage(img, -img.width/2, -img.height/2);
+    ctx.restore();
+}
+
+function pushState() {
+    if(step < history.length - 1) history.length = step + 1;
+    history.push({...state});
+    step++;
+    updateBtns();
+}
+function restoreState(s) {
+    state = {...history[s]};
+    draw();
+    updateBtns();
+}
+function updateBtns() {
+    document.getElementById('undoBtn').disabled = step <= 0;
+    document.getElementById('redoBtn').disabled = step >= history.length - 1;
+}
+
+function undo() { if(step > 0) { step--; restoreState(step); } }
+function redo() { if(step < history.length - 1) { step++; restoreState(step); } }
+function zoom(f) { state.scale = Math.max(0.5, Math.min(5, state.scale * f)); draw(); pushState(); }
+function rotate() { state.rotation = (state.rotation + 90) % 360; draw(); pushState(); }
+function flip() { state.flipped *= -1; draw(); pushState(); }
+function setFilter(f) { state.filter = f; draw(); pushState(); }
+function resetState() { state = {scale: 1, filter: 'none', rotation: 0, flipped: 1}; draw(); }
+function reset() { resetState(); pushState(); }
+
+function saveImg() {
+    if(!img.src) return alert("Pehle image select karo");
+    let w = img.width;
+    let h = img.height;
+    if(state.rotation % 180!== 0) [w, h] = [h, w];
+    const temp = document.createElement('canvas');
+    temp.width = w; temp.height = h;
+    const tctx = temp.getContext('2d');
+    tctx.filter = state.filter;
+    tctx.translate(temp.width/2, temp.height/2);
+    tctx.scale(state.flipped * state.scale, state.scale);
+    tctx.rotate(state.rotation * Math.PI / 180);
+    tctx.drawImage(img, -img.width/2, -img.height/2);
+    const link = document.createElement('a');
+    link.download = 'edited-photo.jpg';
+    link.href = temp.toDataURL('image/jpeg', 0.95);
+    link.click();
+}
+</script>
+</body>
+</html>

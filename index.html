@@ -3,48 +3,48 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Photo Editor</title>
+<title>Photo Editor Pro</title>
 <style>
-    body { background: #222; color: white; margin: 0; text-align: center; font-family: Arial; padding-bottom: 150px; }
-    #canvas { background: #000; max-width: 95%; max-height: 60vh; margin: 10px auto; display: block; border-radius: 10px; }
+    body { background: #121212; color: #eee; margin: 0; text-align: center; font-family: system-ui; padding-bottom: 180px; }
+   .canvas-wrap { padding: 15px 10px; display: flex; justify-content: center; align-items: center; min-height: 55vh; }
+    #canvas { background: #000; max-width: 95vw; max-height: 55vh; border-radius: 12px; }
    .toolbar {
-        padding: 10px;
-        background: #333;
+        padding: 12px;
+        background: #1f1f1f;
         position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 6px;
+        bottom: 0; left: 0; right: 0;
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 8px;
+        border-top: 1px solid #333;
     }
-    button { padding: 10px 12px; background: #4CAF50; color: white; border: none; border-radius: 6px; font-weight: bold; font-size: 13px; }
-    button:disabled { background: #555; color: #aaa; }
-    input { margin: 10px; }
+    button { padding: 12px 4px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 12px; }
+    button:disabled { background: #444; color: #777; }
 </style>
 </head>
 <body>
-    <h2>Photo Editor</h2>
+    <h2>📷 Photo Editor Pro</h2>
     <input type="file" id="upload" accept="image/*">
-    <canvas id="canvas"></canvas>
+    <div class="canvas-wrap">
+        <canvas id="canvas"></canvas>
+    </div>
 
     <div class="toolbar">
-        <button onclick="undo()" id="undoBtn" disabled>Undo</button>
-        <button onclick="redo()" id="redoBtn" disabled>Redo</button>
-        <button onclick="zoom(1.2)">Zoom +</button>
-        <button onclick="zoom(0.8)">Zoom -</button>
-        <button onclick="rotate()">Rotate</button>
-        <button onclick="flip()">Flip</button>
+        <button onclick="undo()" id="undoBtn" disabled>↩️ Undo</button>
+        <button onclick="redo()" id="redoBtn" disabled>↪️ Redo</button>
+        <button onclick="zoom(1.2)">🔍 +</button>
+        <button onclick="zoom(0.8)">🔍 -</button>
+        <button onclick="rotate()">🔄</button>
+        <button onclick="flip()">↔️</button>
         <button onclick="setFilter('brightness(120%)')">B+</button>
         <button onclick="setFilter('brightness(80%)')">B-</button>
         <button onclick="setFilter('contrast(120%)')">C+</button>
         <button onclick="setFilter('contrast(80%)')">C-</button>
         <button onclick="setFilter('grayscale(100%)')">Gray</button>
         <button onclick="setFilter('sepia(100%)')">Sepia</button>
-        <button onclick="setFilter('blur(3px)')">Blur</button>
+        <button onclick="setFilter('blur(2px)')">Blur</button>
         <button onclick="reset()">Reset</button>
-        <button onclick="saveImg()">Save</button>
+        <button onclick="saveImg()">💾 Save</button>
     </div>
 
 <script>
@@ -53,23 +53,23 @@ const ctx = canvas.getContext('2d');
 let history = [];
 let step = -1;
 
-let originalImg = new Image();
+let img = new Image();
 let state = {scale: 1, filter: 'none', rotation: 0, flipped: 1};
 
-document.getElementById('upload').onchange = function(e) {
-    let file = e.target.files[0];
+document.getElementById('upload').onchange = (e) => {
+    const file = e.target.files[0];
     if(!file) return;
-    let url = URL.createObjectURL(file);
-    originalImg.onload = function() {
-        canvas.width = originalImg.width;
-        canvas.height = originalImg.height;
-        state = {scale: 1, filter: 'none', rotation: 0, flipped: 1};
-        history = [];
-        step = -1;
-        draw();
-        saveState(); // sirf 1 baar save
+    img.onload = () => {
+        const maxW = window.innerWidth * 0.95;
+        const maxH = window.innerHeight * 0.55;
+        const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
+        canvas.width = img.width * ratio;
+        canvas.height = img.height * ratio;
+
+        resetState();
+        pushState();
     }
-    originalImg.src = url;
+    img.src = URL.createObjectURL(file);
 }
 
 function draw() {
@@ -78,37 +78,64 @@ function draw() {
     ctx.filter = state.filter;
     ctx.translate(canvas.width/2, canvas.height/2);
     ctx.scale(state.flipped * state.scale, state.scale);
-    ctx.rotate(state.rotation * Math.PI/180);
-    ctx.drawImage(originalImg, -originalImg.width/2, -originalImg.height/2);
+    ctx.rotate(state.rotation * Math.PI / 180);
+    // IMPORTANT FIX: Always draw original image size, not canvas size
+    ctx.drawImage(img, -img.width/2, -img.height/2, img.width, img.height);
     ctx.restore();
 }
 
-function saveState() {
-    // agar same state hai to dubara save mat karo
-    if(step >= 0 && JSON.stringify(history[step]) === JSON.stringify(state)) return;
-    history = history.slice(0, step + 1);
-    history.push(JSON.parse(JSON.stringify(state)));
+function pushState() {
+    const newState = {...state}; // shallow copy enough
+    if(step < history.length - 1) history.length = step + 1;
+    history.push(newState);
     step++;
-    updateButtons();
+    updateBtns();
 }
 
-function loadState(s) {
-    state = JSON.parse(JSON.stringify(history[s]));
+function restoreState(s) {
+    state = {...history[s]};
     draw();
-    updateButtons();
+    updateBtns();
 }
 
-function updateButtons() {
+function updateBtns() {
     document.getElementById('undoBtn').disabled = step <= 0;
     document.getElementById('redoBtn').disabled = step >= history.length - 1;
 }
 
-function undo() {
-    if(step > 0) { step--; loadState(step); }
-}
-function redo() {
-    if(step < history.length - 1) { step++; loadState(step); }
-}
+function undo() { if(step > 0) { step--; restoreState(step); } }
+function redo() { if(step < history.length - 1) { step++; restoreState(step); } }
 
 function zoom(f) {
-    state.scale = state.scale *
+    const newScale = state.scale * f;
+    if(newScale >= 0.5 && newScale <= 5) {
+        state.scale = newScale;
+        draw();
+        pushState();
+    }
+}
+function rotate() { state.rotation = (state.rotation + 90) % 360; draw(); pushState(); }
+function flip() { state.flipped *= -1; draw(); pushState(); }
+function setFilter(f) { state.filter = f; draw(); pushState(); }
+function resetState() { state = {scale: 1, filter: 'none', rotation: 0, flipped: 1}; draw(); }
+function reset() { resetState(); pushState(); }
+
+function saveImg() {
+    const temp = document.createElement('canvas');
+    temp.width = img.width;
+    temp.height = img.height;
+    const tctx = temp.getContext('2d');
+    tctx.filter = state.filter;
+    tctx.translate(temp.width/2, temp.height/2);
+    tctx.scale(state.flipped * state.scale, state.scale);
+    tctx.rotate(state.rotation * Math.PI / 180);
+    tctx.drawImage(img, -img.width/2, -img.height/2);
+
+    const link = document.createElement('a');
+    link.download = 'edited-photo.jpg';
+    link.href = temp.toDataURL('image/jpeg', 0.95);
+    link.click();
+}
+</script>
+</body>
+</html>

@@ -87,12 +87,14 @@ let img = new Image();
 let state = {scale: 1, filter: 'none', rotation: 0, flipped: 1};
 
 function getDisplaySize() {
-    if(!img.src) return {width: 300, height: 300}; // default size
+    if(!img.src) return {width: 300, height: 300};
     let w = img.width;
     let h = img.height;
     if(state.rotation % 180!== 0) [w, h] = [h, w];
     const wrap = document.querySelector('.canvas-wrap');
-    const ratio = Math.min(wrap.clientWidth / w, wrap.clientHeight / h, 1);
+
+    // YAHI MAIN FIX HAI - 1 hata diya. Ab hamesha fit hoga
+    const ratio = Math.min(wrap.clientWidth / w, wrap.clientHeight / h);
     return { width: w * ratio, height: h * ratio };
 }
 
@@ -107,12 +109,15 @@ document.getElementById('upload').onchange = (e) => {
     if(!file) return;
     img.onload = () => {
         uploadLabel.style.display = 'none';
+        state.scale = 1; // reset zoom
         fitCanvas();
         resetState();
         pushState();
     }
     img.src = URL.createObjectURL(file);
 }
+
+window.addEventListener('resize', () => { if(img.src) draw(); });
 
 function draw() {
     if(!img.src) return;
@@ -145,7 +150,7 @@ function updateBtns() {
 
 function undo() { if(step > 0) { step--; restoreState(step); } }
 function redo() { if(step < history.length - 1) { step++; restoreState(step); } }
-function zoom(f) { state.scale = Math.max(0.5, Math.min(5, state.scale * f)); draw(); pushState(); }
+function zoom(f) { state.scale = Math.max(0.3, Math.min(5, state.scale * f)); draw(); pushState(); } // min 0.3 kar diya
 function rotate() { state.rotation = (state.rotation + 90) % 360; draw(); pushState(); }
 function flip() { state.flipped *= -1; draw(); pushState(); }
 function setFilter(f) { state.filter = f; draw(); pushState(); }
@@ -160,16 +165,4 @@ function saveImg() {
     const temp = document.createElement('canvas');
     temp.width = w; temp.height = h;
     const tctx = temp.getContext('2d');
-    tctx.filter = state.filter;
-    tctx.translate(temp.width/2, temp.height/2);
-    tctx.scale(state.flipped * state.scale, state.scale);
-    tctx.rotate(state.rotation * Math.PI / 180);
-    tctx.drawImage(img, -img.width/2, -img.height/2);
-    const link = document.createElement('a');
-    link.download = 'edited-photo.jpg';
-    link.href = temp.toDataURL('image/jpeg', 0.95);
-    link.click();
-}
-</script>
-</body>
-</html>
+    tctx

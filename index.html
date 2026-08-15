@@ -14,11 +14,11 @@
         flex: 1; display: flex; justify-content: center; align-items: center;
         position: relative; padding: 10px; overflow: auto; background: #000; min-height: 200px;
     }
-    #canvas { border-radius: 12px; background: #111; display: block; touch-action: none; max-width: 100%; max-height: 100%; }
+    #canvas { border-radius: 12px; background: #111; display: block; touch-action: none; }
 
     #upload-label {
         position: absolute; padding: 16px 32px; background: #4CAF50; color: white;
-        border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 16px; z-index: 10; transition: transform 0.1s;
+        border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 16px; z-index: 10; transition: 0.1s;
     }
     #upload-label:active { transform: scale(0.95); }
     #upload { display: none; }
@@ -67,7 +67,7 @@ const ctx = canvas.getContext('2d');
 const uploadLabel = document.getElementById('upload-label');
 let history = []; let step = -1;
 let img = new Image();
-let objectURL = null; // memory leak fix
+let objectURL = null;
 let state = {scale: 1, filter: 'none', rotation: 0, flipped: 1};
 
 function getDisplaySize() {
@@ -88,16 +88,14 @@ function fitCanvas() {
 document.getElementById('upload').onchange = (e) => {
     const file = e.target.files[0];
     if(!file) return;
-
-    if(objectURL) URL.revokeObjectURL(objectURL); // old url clear
+    if(objectURL) URL.revokeObjectURL(objectURL);
     objectURL = URL.createObjectURL(file);
-
     img.onload = () => {
         uploadLabel.style.display = 'none';
         fitCanvas();
         resetState();
     }
-    img.onerror = () => alert("Image load nahi hui. File corrupt ho sakti hai");
+    img.onerror = () => alert("Image load nahi hui");
     img.src = objectURL;
 }
 
@@ -119,13 +117,11 @@ function draw() {
 function pushState() {
     if(step < history.length - 1) history.length = step + 1;
     history.push(JSON.parse(JSON.stringify(state)));
-    step++;
-    updateBtns();
+    step++; updateBtns();
 }
 function restoreState(s) {
     state = JSON.parse(JSON.stringify(history[s]));
-    draw();
-    updateBtns();
+    draw(); updateBtns();
 }
 function updateBtns() {
     document.getElementById('undoBtn').disabled = step <= 0;

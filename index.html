@@ -14,16 +14,29 @@
         flex: 1; display: flex; justify-content: center; align-items: center;
         position: relative; padding: 10px; overflow: auto; background: #000; min-height: 200px;
     }
-    #canvas { border-radius: 12px; background: #111; display: block; touch-action: none; }
+    #canvas {
+        border-radius: 12px; background: #111; display: block; touch-action: none;
+        /* FIX: let CSS shrink the canvas to fit its frame instead of
+           computing a "fit" size in JS. The JS math (comparing
+           container size to image size) ran before layout was fully
+           settled, so the canvas was sized bigger than the visible
+           frame and you had to zoom out manually to see it. CSS
+           always gets this right, regardless of load timing. */
+        max-width: 100%; max-height: 100%; width: auto; height: auto;
+    }
 
     #upload-label {
-        /* FIX: removed position:absolute so flexbox on .canvas-wrap
-           actually centers this label instead of it sticking to the
-           top-left corner. */
+        /* FIX (corrected): keep this out of normal flex flow (absolute)
+           so it sits on top of the canvas instead of competing with it
+           for horizontal space — that competition is what pushed the
+           canvas off-screen on narrow phones. Center it explicitly
+           with top/left/transform instead of just deleting the
+           positioning. */
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
         padding: 16px 32px; background: #4CAF50; color: white;
         border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 16px; z-index: 10; transition: 0.1s;
     }
-    #upload-label:active { transform: scale(0.95); }
+    #upload-label:active { transform: translate(-50%, -50%) scale(0.95); }
     #upload { display: none; }
 
     .toolbar {
@@ -73,19 +86,16 @@ let img = new Image();
 let objectURL = null;
 let state = {scale: 1, filter: 'none', rotation: 0, flipped: 1};
 
-function getDisplaySize() {
-    if(!img.src) return {width: 300, height: 300};
+function fitCanvas() {
+    // FIX: use the image's real (rotation-adjusted) pixel size for the
+    // canvas buffer, and let the CSS max-width/max-height rule on
+    // #canvas shrink it to fit the visible frame. No more guessing
+    // container size in JS.
+    if(!img.src) { canvas.width = 300; canvas.height = 300; return; }
     let w = img.width; let h = img.height;
     if(state.rotation % 180 !== 0) [w, h] = [h, w];
-    const wrap = document.querySelector('.canvas-wrap');
-    const ratio = Math.min(wrap.clientWidth / w, wrap.clientHeight / h);
-    return { width: Math.floor(w * ratio), height: Math.floor(h * ratio) };
-}
-
-function fitCanvas() {
-    const size = getDisplaySize();
-    canvas.width = size.width;
-    canvas.height = size.height;
+    canvas.width = w;
+    canvas.height = h;
 }
 
 document.getElementById('upload').onchange = (e) => {

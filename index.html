@@ -12,7 +12,7 @@
    .main-wrap { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
    .canvas-wrap {
         flex: 1; display: flex; justify-content: center; align-items: center;
-        position: relative; padding: 10px; overflow: auto; background: #000; min-height: 200px;
+        position: relative; padding: 10px; overflow: hidden; background: #000; min-height: 200px; /* FIX 1: auto -> hidden */
     }
     #canvas {
         border-radius: 12px; background: #111; display: block; touch-action: none;
@@ -29,12 +29,12 @@
     #upload { display: none; }
 
    .toolbar {
-        background: #1f1f1f; padding: 10px; display: grid; grid-auto-flow: column;
-        grid-auto-columns: 80px; gap: 8px; overflow-x: auto; border-top: 1px solid #333; flex-shrink: 0;
+        background: #1f1f1f; padding: 10px; display: flex; /* FIX 2: grid -> flex */
+        gap: 8px; overflow-x: auto; border-top: 1px solid #333; flex-shrink: 0;
     }
-   .toolbar::-webkit-scrollbar { height: 4px; }
+   .toolbar::-webkit-scrollbar { height: 6px; } /* thoda mota kiya */
    .toolbar::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
-    button { padding: 12px 6px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 11px; white-space: nowrap; cursor: pointer; }
+    button { padding: 12px 10px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 12px; white-space: nowrap; cursor: pointer; flex-shrink: 0; } /* FIX 3: flex-shrink: 0 add kiya */
     button.active { background: #ff9800; }
     button:active { background: #45a049; }
     button:disabled { background: #3a3a3a; color: #666; cursor: not-allowed; }
@@ -54,7 +54,146 @@
             <canvas id="canvas"></canvas>
         </div>
         <div class="toolbar">
-            <button onclick="setMode('edit')" id="editBtn" class="active">✋ Pan</button>
-            <button onclick="setMode('draw')">🖊️ Draw</button>
+            <button onclick="setMode('edit')" id="editBtn" class="active">✋ Move</button> <!-- FIX 4: Pan -> Move -->
+            <button onclick="setMode('draw')" id="drawBtn">🖊️ Draw</button>
             <button onclick="addText()">T Text</button>
-            <button onclick="undo()" id="undo
+            <button onclick="undo()" id="undoBtn" disabled>↩️ Undo</button>
+            <button onclick="redo()" id="redoBtn" disabled>↪️ Redo</button>
+            <button onclick="zoom(1.25)">🔍 +</button>
+            <button onclick="zoom(0.8)">🔍 -</button>
+            <button onclick="rotate()">🔄 Rotate</button>
+            <button onclick="flip()">↔️ Flip</button>
+            <button onclick="setFilter('grayscale(100%)')">Gray</button>
+            <button onclick="reset()">Reset</button>
+            <button onclick="saveImg()">💾 Save</button>
+        </div>
+    </div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const uploadLabel = document.getElementById('upload-label');
+let history = []; let step = -1;
+let img = new Image();
+let state = {scale: 1, filter: 'none', rotation: 0, flipped: 1, offsetX: 0, offsetY: 0};
+let mode = 'edit';
+let isDragging = false;
+let lastX = 0, lastY = 0;
+
+function fitCanvas() {
+    if(!img.src) return;
+    let w = img.width; let h = img.height;
+    if(state.rotation % 180!== 0) [w, h] = [h, w];
+    canvas.width = w;
+    canvas.height = h;
+}
+
+document.getElementById('upload').onchange = (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+        uploadLabel.style.display = 'none';
+        history = []; step = -1;
+        state = {scale: 1, filter: 'none', rotation: 0, flipped: 1, offsetX: 0, offsetY: 0};
+        fitCanvas(); draw(); pushState();
+        URL.revokeObjectURL(url);
+    }
+    img.src = url;
+}
+
+function draw() {
+    if(!img.src) return;
+    fitCanvas();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.filter = state.filter;
+    ctx.translate(canvas.width/2 + state.offsetX, canvas.height/2 + state.offsetY);
+    ctx.scale(state.flipped * state.scale, state.scale);
+    ctx.rotate(state.rotation * Math.PI / 180);
+    ctx.drawImage(img, -img.width/2, -img.height/2);
+    ctx.restore();
+}
+
+// FIX 5: Pan ka hisaab simple kiya
+function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        x: (e.touches? e.touches[0].clientX : e.clientX) - rect.left,
+        y: (e.touches? e.touches[0].clientY : e.clientY) - rect.top
+    };
+}
+
+canvas.onmousedown = canvas.ontouchstart = (e) => {
+    if(mode!== 'edit') return;
+    isDragging = true; canvas.classList.add('grabbing');
+    const pos = getPos(e); lastX = pos.x; lastY = pos.y;
+}
+
+canvas.onmousemove = canvas.ontouchmove = (e) => {
+    if(!isDragging || mode!== 'edit') return;
+    e.preventDefault();
+    const pos = getPos(e);
+    state.offsetX += pos.x - lastX;
+    state.offsetY += pos.y - lastY;
+    lastX = pos.x; lastY = pos.y;
+    draw();
+}
+
+canvas.onmouseup = canvas.ontouchend = () => {
+    if(isDragging) { isDragging = false; canvas.classList.remove('grabbing'); pushState(); }
+}
+
+function pushState() {
+    if(step < history.length - 1) history.length = step + 1;
+    history.push(JSON.parse(JSON.stringify(state)));
+    step++; updateBtns();
+}
+function restoreState(s) {
+    state = JSON.parse(JSON.stringify(history[s])); draw(); updateBtns();
+}
+function updateBtns() {
+    document.getElementById('undoBtn').disabled = step <= 0;
+    document.getElementById('redoBtn').disabled = step >= history.length - 1;
+}
+
+function setMode(m) {
+    mode = m;
+    document.querySelectorAll('.toolbar button').forEach(b => b.classList.remove('active'));
+    document.getElementById(m+'Btn').classList.add('active');
+}
+
+function zoom(f) { state.scale = Math.max(0.3, Math.min(5, state.scale * f)); draw(); pushState(); }
+function rotate() { state.rotation = (state.rotation + 90) % 360; state.offsetX = 0; state.offsetY = 0; draw(); pushState(); }
+function flip() { state.flipped *= -1; draw(); pushState(); }
+function setFilter(f) { state.filter = f; draw(); pushState(); }
+function reset() { state = {scale: 1, filter: 'none', rotation: 0, flipped: 1, offsetX: 0, offsetY: 0}; draw(); pushState(); }
+function undo() { if(step > 0) { step--; restoreState(step); } }
+function redo() { if(step < history.length - 1) { step++; restoreState(step); } }
+
+function addText() {
+    const text = prompt("Text likho:");
+    if(text) {
+        ctx.font = '40px system-ui'; ctx.fillStyle = 'white'; ctx.textAlign = 'center';
+        ctx.fillText(text, canvas.width/2, 80); pushState();
+    }
+}
+
+function saveImg() {
+    if(!img.src) return alert("Pehle image select karo");
+    const temp = document.createElement('canvas');
+    let w = img.width; let h = img.height;
+    if(state.rotation % 180!== 0) [w, h] = [h, w];
+    temp.width = w; temp.height = h;
+    const tctx = temp.getContext('2d');
+    tctx.filter = state.filter;
+    tctx.translate(temp.width/2, temp.height/2);
+    tctx.scale(state.flipped, 1);
+    tctx.rotate(state.rotation * Math.PI / 180);
+    tctx.drawImage(img, -img.width/2, -img.height/2);
+    const link = document.createElement('a');
+    link.download = 'edited.jpg'; link.href = temp.toDataURL('image/jpeg', 0.95); link.click();
+}
+</script>
+</body>
+</html>

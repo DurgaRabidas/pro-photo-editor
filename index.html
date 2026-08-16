@@ -159,4 +159,41 @@ function updateBtns() {
 
 function setMode(m) {
     mode = m;
-    document.querySelector
+    document.querySelectorAll('.toolbar button').forEach(b => b.classList.remove('active'));
+    document.getElementById(m+'Btn').classList.add('active');
+}
+
+function zoom(f) { state.scale = Math.max(0.3, Math.min(5, state.scale * f)); draw(); pushState(); }
+function rotate() { state.rotation = (state.rotation + 90) % 360; state.offsetX = 0; state.offsetY = 0; draw(); pushState(); }
+function flip() { state.flipped *= -1; draw(); pushState(); }
+function setFilter(f) { state.filter = f; draw(); pushState(); } // Filter yaha set hota hai
+function reset() { state = {scale: 1, filter: 'none', rotation: 0, flipped: 1, offsetX: 0, offsetY: 0}; draw(); pushState(); }
+function undo() { if(step > 0) { step--; restoreState(step); } }
+function redo() { if(step < history.length - 1) { step++; restoreState(step); }
+
+function addText() {
+    const text = prompt("Text likho:");
+    if(text) {
+        ctx.font = '40px system-ui'; ctx.fillStyle = 'white'; ctx.textAlign = 'center';
+        ctx.fillText(text, canvas.width/2, 80); pushState();
+    }
+}
+
+function saveImg() {
+    if(!img.src) return alert("Pehle image select karo");
+    const temp = document.createElement('canvas');
+    let w = img.width; let h = img.height;
+    if(state.rotation % 180!== 0) [w, h] = [h, w];
+    temp.width = w; temp.height = h;
+    const tctx = temp.getContext('2d');
+    tctx.filter = state.filter;
+    tctx.translate(temp.width/2, temp.height/2);
+    tctx.scale(state.flipped, 1);
+    tctx.rotate(state.rotation * Math.PI / 180);
+    tctx.drawImage(img, -img.width/2, -img.height/2);
+    const link = document.createElement('a');
+    link.download = 'edited.jpg'; link.href = temp.toDataURL('image/jpeg', 0.95); link.click();
+}
+</script>
+</body>
+</html>

@@ -9,10 +9,10 @@
     body { background: #121212; color: #eee; margin: 0; font-family: system-ui, sans-serif; }
     h2 { margin: 10px 0; text-align: center; font-size: 18px; font-weight: 600; }
 
-   .main-wrap { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
-   .canvas-wrap {
+  .main-wrap { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+  .canvas-wrap {
         flex: 1; display: flex; justify-content: center; align-items: center;
-        position: relative; padding: 10px; overflow: hidden; background: #000; min-height: 200px; /* FIX 1: auto -> hidden */
+        position: relative; padding: 10px; overflow: hidden; background: #000; min-height: 200px;
     }
     #canvas {
         border-radius: 12px; background: #111; display: block; touch-action: none;
@@ -28,21 +28,16 @@
     #upload-label:active { transform: translate(-50%, -50%) scale(0.95); }
     #upload { display: none; }
 
-   .toolbar {
-        background: #1f1f1f; padding: 10px; display: flex; /* FIX 2: grid -> flex */
+  .toolbar {
+        background: #1f1f1f; padding: 10px; display: flex;
         gap: 8px; overflow-x: auto; border-top: 1px solid #333; flex-shrink: 0;
     }
-   .toolbar::-webkit-scrollbar { height: 6px; } /* thoda mota kiya */
-   .toolbar::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
-    button { padding: 12px 10px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 12px; white-space: nowrap; cursor: pointer; flex-shrink: 0; } /* FIX 3: flex-shrink: 0 add kiya */
+  .toolbar::-webkit-scrollbar { height: 6px; }
+  .toolbar::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+    button { padding: 12px 10px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 12px; white-space: nowrap; cursor: pointer; flex-shrink: 0; }
     button.active { background: #ff9800; }
     button:active { background: #45a049; }
     button:disabled { background: #3a3a3a; color: #666; cursor: not-allowed; }
-
-   .text-input {
-        position: absolute; background: transparent; border: 1px dashed #fff; color: white;
-        font-size: 20px; padding: 5px; outline: none; z-index: 20;
-    }
 </style>
 </head>
 <body>
@@ -54,7 +49,7 @@
             <canvas id="canvas"></canvas>
         </div>
         <div class="toolbar">
-            <button onclick="setMode('edit')" id="editBtn" class="active">✋ Move</button> <!-- FIX 4: Pan -> Move -->
+            <button onclick="setMode('edit')" id="editBtn" class="active">✋ Move</button>
             <button onclick="setMode('draw')" id="drawBtn">🖊️ Draw</button>
             <button onclick="addText()">T Text</button>
             <button onclick="undo()" id="undoBtn" disabled>↩️ Undo</button>
@@ -63,7 +58,13 @@
             <button onclick="zoom(0.8)">🔍 -</button>
             <button onclick="rotate()">🔄 Rotate</button>
             <button onclick="flip()">↔️ Flip</button>
+            
+            <!-- NAYE FILTER BUTTONS -->
             <button onclick="setFilter('grayscale(100%)')">Gray</button>
+            <button onclick="setFilter('blur(3px)')">Blur</button>
+            <button onclick="setFilter('contrast(150%)')">Contrast</button>
+            <button onclick="setFilter('brightness(130%)')">Bright</button>
+            <button onclick="setFilter('sepia(100%)')">Sepia</button>
             <button onclick="reset()">Reset</button>
             <button onclick="saveImg()">💾 Save</button>
         </div>
@@ -107,7 +108,7 @@ function draw() {
     fitCanvas();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
-    ctx.filter = state.filter;
+    ctx.filter = state.filter; // Yahi filter apply hota hai
     ctx.translate(canvas.width/2 + state.offsetX, canvas.height/2 + state.offsetY);
     ctx.scale(state.flipped * state.scale, state.scale);
     ctx.rotate(state.rotation * Math.PI / 180);
@@ -115,7 +116,6 @@ function draw() {
     ctx.restore();
 }
 
-// FIX 5: Pan ka hisaab simple kiya
 function getPos(e) {
     const rect = canvas.getBoundingClientRect();
     return {
@@ -159,41 +159,4 @@ function updateBtns() {
 
 function setMode(m) {
     mode = m;
-    document.querySelectorAll('.toolbar button').forEach(b => b.classList.remove('active'));
-    document.getElementById(m+'Btn').classList.add('active');
-}
-
-function zoom(f) { state.scale = Math.max(0.3, Math.min(5, state.scale * f)); draw(); pushState(); }
-function rotate() { state.rotation = (state.rotation + 90) % 360; state.offsetX = 0; state.offsetY = 0; draw(); pushState(); }
-function flip() { state.flipped *= -1; draw(); pushState(); }
-function setFilter(f) { state.filter = f; draw(); pushState(); }
-function reset() { state = {scale: 1, filter: 'none', rotation: 0, flipped: 1, offsetX: 0, offsetY: 0}; draw(); pushState(); }
-function undo() { if(step > 0) { step--; restoreState(step); } }
-function redo() { if(step < history.length - 1) { step++; restoreState(step); } }
-
-function addText() {
-    const text = prompt("Text likho:");
-    if(text) {
-        ctx.font = '40px system-ui'; ctx.fillStyle = 'white'; ctx.textAlign = 'center';
-        ctx.fillText(text, canvas.width/2, 80); pushState();
-    }
-}
-
-function saveImg() {
-    if(!img.src) return alert("Pehle image select karo");
-    const temp = document.createElement('canvas');
-    let w = img.width; let h = img.height;
-    if(state.rotation % 180!== 0) [w, h] = [h, w];
-    temp.width = w; temp.height = h;
-    const tctx = temp.getContext('2d');
-    tctx.filter = state.filter;
-    tctx.translate(temp.width/2, temp.height/2);
-    tctx.scale(state.flipped, 1);
-    tctx.rotate(state.rotation * Math.PI / 180);
-    tctx.drawImage(img, -img.width/2, -img.height/2);
-    const link = document.createElement('a');
-    link.download = 'edited.jpg'; link.href = temp.toDataURL('image/jpeg', 0.95); link.click();
-}
-</script>
-</body>
-</html>
+    document.querySelector

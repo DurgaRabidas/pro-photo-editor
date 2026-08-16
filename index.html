@@ -84,7 +84,7 @@ let lastX = 0, lastY = 0;
 function fitCanvas() {
     if(!img.src) return;
     let w = img.width; let h = img.height;
-    if(state.rotation % 180!== 0) [w, h] = [h, w];
+    if(state.rotation % 180 !== 0) [w, h] = [h, w];
     canvas.width = w;
     canvas.height = h;
 }
@@ -119,19 +119,19 @@ function draw() {
 function getPos(e) {
     const rect = canvas.getBoundingClientRect();
     return {
-        x: (e.touches? e.touches[0].clientX : e.clientX) - rect.left,
-        y: (e.touches? e.touches[0].clientY : e.clientY) - rect.top
+        x: (e.touches ? e.touches[0].clientX : e.clientX) - rect.left,
+        y: (e.touches ? e.touches[0].clientY : e.clientY) - rect.top
     };
 }
 
 canvas.onmousedown = canvas.ontouchstart = (e) => {
-    if(mode!== 'edit') return;
+    if(mode !== 'edit') return;
     isDragging = true; canvas.classList.add('grabbing');
     const pos = getPos(e); lastX = pos.x; lastY = pos.y;
 }
 
 canvas.onmousemove = canvas.ontouchmove = (e) => {
-    if(!isDragging || mode!== 'edit') return;
+    if(!isDragging || mode !== 'edit') return;
     e.preventDefault();
     const pos = getPos(e);
     state.offsetX += pos.x - lastX;
@@ -169,7 +169,7 @@ function flip() { state.flipped *= -1; draw(); pushState(); }
 function setFilter(f) { state.filter = f; draw(); pushState(); } // Filter yaha set hota hai
 function reset() { state = {scale: 1, filter: 'none', rotation: 0, flipped: 1, offsetX: 0, offsetY: 0}; draw(); pushState(); }
 function undo() { if(step > 0) { step--; restoreState(step); } }
-function redo() { if(step < history.length - 1) { step++; restoreState(step); }
+function redo() { if(step < history.length - 1) { step++; restoreState(step); } }
 
 function addText() {
     const text = prompt("Text likho:");
@@ -183,7 +183,7 @@ function saveImg() {
     if(!img.src) return alert("Pehle image select karo");
     const temp = document.createElement('canvas');
     let w = img.width; let h = img.height;
-    if(state.rotation % 180!== 0) [w, h] = [h, w];
+    if(state.rotation % 180 !== 0) [w, h] = [h, w];
     temp.width = w; temp.height = h;
     const tctx = temp.getContext('2d');
     tctx.filter = state.filter;

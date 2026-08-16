@@ -9,26 +9,29 @@
     body { background: #121212; color: #eee; margin: 0; font-family: system-ui, sans-serif; }
     h2 { margin: 10px 0; text-align: center; font-size: 18px; font-weight: 600; }
 
-.main-wrap { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
-.canvas-wrap {
+    .main-wrap { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+    .canvas-wrap {
         flex: 1; display: flex; justify-content: center; align-items: center;
         position: relative; padding: 10px; overflow: auto; background: #000; min-height: 200px;
     }
     #canvas { border-radius: 12px; background: #111; display: block; touch-action: none; }
 
     #upload-label {
-        position: absolute; padding: 16px 32px; background: #4CAF50; color: white;
+        /* FIX: removed position:absolute so flexbox on .canvas-wrap
+           actually centers this label instead of it sticking to the
+           top-left corner. */
+        padding: 16px 32px; background: #4CAF50; color: white;
         border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 16px; z-index: 10; transition: 0.1s;
     }
     #upload-label:active { transform: scale(0.95); }
     #upload { display: none; }
 
-.toolbar {
+    .toolbar {
         background: #1f1f1f; padding: 10px; display: grid; grid-auto-flow: column;
         grid-auto-columns: 80px; gap: 8px; overflow-x: auto; border-top: 1px solid #333; flex-shrink: 0;
     }
-.toolbar::-webkit-scrollbar { height: 4px; }
-.toolbar::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+    .toolbar::-webkit-scrollbar { height: 4px; }
+    .toolbar::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
     button { padding: 12px 6px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 11px; white-space: nowrap; cursor: pointer; }
     button:active { background: #45a049; }
     button:disabled { background: #3a3a3a; color: #666; cursor: not-allowed; }
@@ -73,7 +76,7 @@ let state = {scale: 1, filter: 'none', rotation: 0, flipped: 1};
 function getDisplaySize() {
     if(!img.src) return {width: 300, height: 300};
     let w = img.width; let h = img.height;
-    if(state.rotation % 180!== 0) [w, h] = [h, w];
+    if(state.rotation % 180 !== 0) [w, h] = [h, w];
     const wrap = document.querySelector('.canvas-wrap');
     const ratio = Math.min(wrap.clientWidth / w, wrap.clientHeight / h);
     return { width: Math.floor(w * ratio), height: Math.floor(h * ratio) };
@@ -92,6 +95,11 @@ document.getElementById('upload').onchange = (e) => {
     objectURL = URL.createObjectURL(file);
     img.onload = () => {
         uploadLabel.style.display = 'none';
+        // FIX: clear undo/redo history when a new image is loaded,
+        // otherwise stale states from the previous image linger and
+        // undo/redo can apply the wrong image's edits.
+        history = [];
+        step = -1;
         fitCanvas();
         resetState();
     }
@@ -140,13 +148,17 @@ function reset() { resetState(); }
 function saveImg() {
     if(!img.src) return alert("Pehle image select karo");
     let w = img.width; let h = img.height;
-    if(state.rotation % 180!== 0) [w, h] = [h, w];
+    if(state.rotation % 180 !== 0) [w, h] = [h, w];
     const temp = document.createElement('canvas');
     temp.width = w; temp.height = h;
     const tctx = temp.getContext('2d');
     tctx.filter = state.filter;
     tctx.translate(temp.width/2, temp.height/2);
-    tctx.scale(state.flipped * state.scale, state.scale);
+    // FIX: don't apply the preview zoom (state.scale) to the exported
+    // image — that's a viewport-fit/zoom convenience for on-screen
+    // editing, not something that should crop/scale the saved file.
+    // Only flip, rotation, and filters are "real" edits.
+    tctx.scale(state.flipped, 1);
     tctx.rotate(state.rotation * Math.PI / 180);
     tctx.drawImage(img, -img.width/2, -img.height/2);
     const link = document.createElement('a');

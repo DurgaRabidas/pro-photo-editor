@@ -3,35 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Photo Editor Pro</title>
+<title>Photo Editor Ultra</title>
 <style>
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     body { background: #121212; color: #eee; margin: 0; font-family: system-ui, sans-serif; }
     h2 { margin: 10px 0; text-align: center; font-size: 18px; font-weight: 600; }
 
-    .main-wrap { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
-    .canvas-wrap {
+   .main-wrap { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+   .canvas-wrap {
         flex: 1; display: flex; justify-content: center; align-items: center;
         position: relative; padding: 10px; overflow: auto; background: #000; min-height: 200px;
     }
     #canvas {
         border-radius: 12px; background: #111; display: block; touch-action: none;
-        /* FIX: let CSS shrink the canvas to fit its frame instead of
-           computing a "fit" size in JS. The JS math (comparing
-           container size to image size) ran before layout was fully
-           settled, so the canvas was sized bigger than the visible
-           frame and you had to zoom out manually to see it. CSS
-           always gets this right, regardless of load timing. */
-        max-width: 100%; max-height: 100%; width: auto; height: auto;
+        max-width: 100%; max-height: 100%; width: auto; height: auto; cursor: grab;
     }
+    #canvas.grabbing { cursor: grabbing; }
 
     #upload-label {
-        /* FIX (corrected): keep this out of normal flex flow (absolute)
-           so it sits on top of the canvas instead of competing with it
-           for horizontal space — that competition is what pushed the
-           canvas off-screen on narrow phones. Center it explicitly
-           with top/left/transform instead of just deleting the
-           positioning. */
         position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
         padding: 16px 32px; background: #4CAF50; color: white;
         border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 16px; z-index: 10; transition: 0.1s;
@@ -39,143 +28,33 @@
     #upload-label:active { transform: translate(-50%, -50%) scale(0.95); }
     #upload { display: none; }
 
-    .toolbar {
+   .toolbar {
         background: #1f1f1f; padding: 10px; display: grid; grid-auto-flow: column;
         grid-auto-columns: 80px; gap: 8px; overflow-x: auto; border-top: 1px solid #333; flex-shrink: 0;
     }
-    .toolbar::-webkit-scrollbar { height: 4px; }
-    .toolbar::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+   .toolbar::-webkit-scrollbar { height: 4px; }
+   .toolbar::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
     button { padding: 12px 6px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 11px; white-space: nowrap; cursor: pointer; }
+    button.active { background: #ff9800; }
     button:active { background: #45a049; }
     button:disabled { background: #3a3a3a; color: #666; cursor: not-allowed; }
+
+   .text-input {
+        position: absolute; background: transparent; border: 1px dashed #fff; color: white;
+        font-size: 20px; padding: 5px; outline: none; z-index: 20;
+    }
 </style>
 </head>
 <body>
     <div class="main-wrap">
-        <h2>📷 Photo Editor Pro</h2>
-        <div class="canvas-wrap">
+        <h2>📷 Photo Editor Ultra</h2>
+        <div class="canvas-wrap" id="canvasWrap">
             <label for="upload" id="upload-label">📁 Choose Image</label>
             <input type="file" id="upload" accept="image/*">
             <canvas id="canvas"></canvas>
         </div>
         <div class="toolbar">
-            <button onclick="undo()" id="undoBtn" disabled>↩️ Undo</button>
-            <button onclick="redo()" id="redoBtn" disabled>↪️ Redo</button>
-            <button onclick="zoom(1.25)">🔍 +</button>
-            <button onclick="zoom(0.8)">🔍 -</button>
-            <button onclick="rotate()">🔄 Rotate</button>
-            <button onclick="flip()">↔️ Flip</button>
-            <button onclick="setFilter('brightness(120%)')">B +</button>
-            <button onclick="setFilter('brightness(80%)')">B -</button>
-            <button onclick="setFilter('contrast(120%)')">C +</button>
-            <button onclick="setFilter('contrast(80%)')">C -</button>
-            <button onclick="setFilter('grayscale(100%)')">Gray</button>
-            <button onclick="setFilter('sepia(100%)')">Sepia</button>
-            <button onclick="setFilter('blur(2px)')">Blur</button>
-            <button onclick="reset()">Reset</button>
-            <button onclick="saveImg()">💾 Save</button>
-        </div>
-    </div>
-
-<script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const uploadLabel = document.getElementById('upload-label');
-let history = []; let step = -1;
-let img = new Image();
-let objectURL = null;
-let state = {scale: 1, filter: 'none', rotation: 0, flipped: 1};
-
-function fitCanvas() {
-    // FIX: use the image's real (rotation-adjusted) pixel size for the
-    // canvas buffer, and let the CSS max-width/max-height rule on
-    // #canvas shrink it to fit the visible frame. No more guessing
-    // container size in JS.
-    if(!img.src) { canvas.width = 300; canvas.height = 300; return; }
-    let w = img.width; let h = img.height;
-    if(state.rotation % 180 !== 0) [w, h] = [h, w];
-    canvas.width = w;
-    canvas.height = h;
-}
-
-document.getElementById('upload').onchange = (e) => {
-    const file = e.target.files[0];
-    if(!file) return;
-    if(objectURL) URL.revokeObjectURL(objectURL);
-    objectURL = URL.createObjectURL(file);
-    img.onload = () => {
-        uploadLabel.style.display = 'none';
-        // FIX: clear undo/redo history when a new image is loaded,
-        // otherwise stale states from the previous image linger and
-        // undo/redo can apply the wrong image's edits.
-        history = [];
-        step = -1;
-        fitCanvas();
-        resetState();
-    }
-    img.onerror = () => alert("Image load nahi hui");
-    img.src = objectURL;
-}
-
-window.addEventListener('resize', () => { if(img.src) draw(); });
-
-function draw() {
-    if(!img.src) return;
-    fitCanvas();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.save();
-    ctx.filter = state.filter;
-    ctx.translate(canvas.width/2, canvas.height/2);
-    ctx.scale(state.flipped * state.scale, state.scale);
-    ctx.rotate(state.rotation * Math.PI / 180);
-    ctx.drawImage(img, -img.width/2, -img.height/2);
-    ctx.restore();
-}
-
-function pushState() {
-    if(step < history.length - 1) history.length = step + 1;
-    history.push(JSON.parse(JSON.stringify(state)));
-    step++; updateBtns();
-}
-function restoreState(s) {
-    state = JSON.parse(JSON.stringify(history[s]));
-    draw(); updateBtns();
-}
-function updateBtns() {
-    document.getElementById('undoBtn').disabled = step <= 0;
-    document.getElementById('redoBtn').disabled = step >= history.length - 1;
-}
-
-function undo() { if(step > 0) { step--; restoreState(step); } }
-function redo() { if(step < history.length - 1) { step++; restoreState(step); } }
-function zoom(f) { state.scale = Math.max(0.3, Math.min(5, state.scale * f)); draw(); pushState(); }
-function rotate() { state.rotation = (state.rotation + 90) % 360; draw(); pushState(); }
-function flip() { state.flipped *= -1; draw(); pushState(); }
-function setFilter(f) { state.filter = f; draw(); pushState(); }
-function resetState() { state = {scale: 1, filter: 'none', rotation: 0, flipped: 1}; draw(); pushState(); }
-function reset() { resetState(); }
-
-function saveImg() {
-    if(!img.src) return alert("Pehle image select karo");
-    let w = img.width; let h = img.height;
-    if(state.rotation % 180 !== 0) [w, h] = [h, w];
-    const temp = document.createElement('canvas');
-    temp.width = w; temp.height = h;
-    const tctx = temp.getContext('2d');
-    tctx.filter = state.filter;
-    tctx.translate(temp.width/2, temp.height/2);
-    // FIX: don't apply the preview zoom (state.scale) to the exported
-    // image — that's a viewport-fit/zoom convenience for on-screen
-    // editing, not something that should crop/scale the saved file.
-    // Only flip, rotation, and filters are "real" edits.
-    tctx.scale(state.flipped, 1);
-    tctx.rotate(state.rotation * Math.PI / 180);
-    tctx.drawImage(img, -img.width/2, -img.height/2);
-    const link = document.createElement('a');
-    link.download = 'edited-photo.jpg';
-    link.href = temp.toDataURL('image/jpeg', 0.95);
-    link.click();
-}
-</script>
-</body>
-</html>
+            <button onclick="setMode('edit')" id="editBtn" class="active">✋ Pan</button>
+            <button onclick="setMode('draw')">🖊️ Draw</button>
+            <button onclick="addText()">T Text</button>
+            <button onclick="undo()" id="undo

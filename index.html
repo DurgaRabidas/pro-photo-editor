@@ -1,67 +1,141 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photo Editor Tested</title>
 <style>
-body{background:#000;color:#fff;text-align:center;margin:0}
-canvas{background:#222;max-width:100%;max-height:70vh}
-button,input{margin:5px;padding:8px}
-#tools{display:none}
+body {background:#121212; color:#fff; margin:0; font-family:system-ui; text-align:center}
+#wrap {position:relative; width:100%; height:70vh; background:#000; display:flex; justify-content:center; align-items:center; overflow:hidden}
+canvas {position:absolute; max-width:100%; max-height:100%; touch-action:none}
+#tools {background:#1f1f1f; padding:10px; display:flex; flex-wrap:wrap; gap:8px; justify-content:center; border-top:1px solid #333}
+button,input{padding:10px; border:none; border-radius:8px; background:#4CAF50; color:#fff; font-weight:600; cursor:pointer}
+button:active{background:#45a049}
+#upload-label{padding:16px 32px; background:#4CAF50; border-radius:12px; display:inline-block; margin:20px; font-weight:bold; cursor:pointer}
+#upload{display:none}
 </style>
 </head>
 <body>
-<h3>Photo Editor</h3>
-<input type="file" id="up">
-<br>
-<canvas id="c"></canvas>
-<br>
+<h3>📷 Photo Editor Tested</h3>
+
+<div id="wrap">
+    <canvas id="imgCanvas"></canvas>
+    <canvas id="drawCanvas"></canvas>
+</div>
+<label for="upload" id="upload-label">📁 Choose Image</label>
+<input type="file" id="upload" accept="image/*">
+
 <div id="tools">
-<button onclick="mode='draw'">Draw</button>
-<input type="color" id="col" value="#ff0000">
-<input type="range" id="size" min="1" max="30" value="5">
-<button onclick="mode='text'">Add Text</button>
-<button onclick="rot+=10;draw()">Rotate</button>
-<button onclick="skx+=0.1;draw()">Skew</button>
-<button onclick="download()">Save</button>
+    <input type="color" id="color" value="#ff0000" title="Brush Color">
+    <input type="range" id="size" min="2" max="50" value="5" title="Brush Size">
+    <button onclick="mode='draw'">🖊️ Draw</button>
+    <button onclick="addText()">T Text</button>
+    <button onclick="rotate(-5)">↪️ Rotate L</button>
+    <button onclick="rotate(5)">↩️ Rotate R</button>
+    <button onclick="skew(-0.1)">↗️ Skew L</button>
+    <button onclick="skew(0.1)">↖️ Skew R</button>
+    <button onclick="zoom(1.2)">🔍 +</button>
+    <button onclick="zoom(0.8)">🔍 -</button>
+    <button onclick="save()">💾 Save</button>
 </div>
 
 <script>
-let c=document.getElementById('c'),x=c.getContext('2d'),img=new Image(),mode='edit',drawing=0,rot=0,skx=0;
-let draws=[],texts=[],col="#ff0000",bs=5;
+let imgCanvas = document.getElementById('imgCanvas');
+let drawCanvas = document.getElementById('drawCanvas');
+let ictx = imgCanvas.getContext('2d');
+let dctx = drawCanvas.getContext('2d');
+let img = new Image();
+let scale=1, rot=0, sk=0, mode='edit', drawing=false;
+let brushColor='#ff0000', brushSize=5;
+let texts=[], paths=[]; // paths for undo
 
-document.getElementById('up').onchange=e=>{img.src=URL.createObjectURL(e.target.files[0])}
-img.onload=()=>{c.width=img.width;c.height=img.height;document.getElementById('tools').style.display='block';draw()}
-document.getElementById('col').oninput=e=>col=e.target.value
-document.getElementById('size').oninput=e=>bs=e.target.value
+document.getElementById('color').oninput=e=>brushColor=e.target.value;
+document.getElementById('size').oninput=e=>brushSize=e.target.value;
 
-function draw(){
- x.clearRect(0,0,c.width,c.height);
- x.save();
- x.translate(c.width/2,c.height/2);
- x.rotate(rot*Math.PI/180);
- x.transform(1,0,skx,1,0,0);
- x.drawImage(img,-img.width/2,-img.height/2);
- x.restore();
-
- x.save();
- x.translate(c.width/2,c.height/2);
- x.rotate(rot*Math.PI/180);
- x.transform(1,0,skx,1,0,0);
- draws.forEach(d=>{x.strokeStyle=d.c;x.lineWidth=d.s;x.beginPath();d.p.forEach((p,i)=>i?x.lineTo(p.x,p.y):x.moveTo(p.x,p.y));x.stroke()})
- texts.forEach(t=>{x.fillStyle=t.c;x.font=t.s+"px Arial";x.fillText(t.txt,t.x,t.y)})
- x.restore();
+document.getElementById('upload').onchange=e=>{
+    let file = e.target.files[0]; if(!file) return;
+    img.src = URL.createObjectURL(file);
+    document.getElementById('upload-label').style.display='none';
+}
+img.onload=()=>{
+    imgCanvas.width = drawCanvas.width = img.width;
+    imgCanvas.height = drawCanvas.height = img.height;
+    drawImage();
 }
 
-c.onmousedown=e=>{if(mode=='draw'){drawing=1;draws.push({c:col,s:bs,p:[{x:e.offsetX-c.width/2,y:e.offsetY-c.height/2}]})}}
-c.onmousemove=e=>{if(drawing){draws[draws.length-1].p.push({x:e.offsetX-c.width/2,y:e.offsetY-c.height/2});draw()}}
-c.onmouseup=()=>{drawing=0}
+function drawImage(){
+    ictx.clearRect(0,0,imgCanvas.width,imgCanvas.height);
+    ictx.save();
+    ictx.translate(imgCanvas.width/2, imgCanvas.height/2);
+    ictx.scale(scale,scale);
+    ictx.rotate(rot*Math.PI/180);
+    ictx.transform(1,0,sk,1,0,0);
+    ictx.drawImage(img,-img.width/2,-img.height/2);
+    ictx.restore();
+}
+
+function redrawDrawLayer(){
+    dctx.clearRect(0,0,drawCanvas.width,drawCanvas.height);
+    dctx.save();
+    dctx.translate(drawCanvas.width/2, drawCanvas.height/2);
+    dctx.scale(scale,scale);
+    dctx.rotate(rot*Math.PI/180);
+    dctx.transform(1,0,sk,1,0,0);
+
+    // Draw all saved paths
+    paths.forEach(p=>{
+        dctx.strokeStyle=p.color; dctx.lineWidth=p.size; dctx.lineCap='round';
+        dctx.beginPath(); p.points.forEach((pt,i)=> i==0? dctx.moveTo(pt.x,pt.y) : dctx.lineTo(pt.x,pt.y)); dctx.stroke();
+    });
+
+    // Draw all texts
+    texts.forEach(t=>{
+        dctx.fillStyle=t.color; dctx.font=`${t.size}px ${t.font}`; dctx.fillText(t.txt,t.x,t.y);
+    });
+    dctx.restore();
+}
+
+drawCanvas.onmousedown=e=>{
+    if(mode!='draw') return;
+    drawing=true;
+    let rect = drawCanvas.getBoundingClientRect();
+    let x = e.clientX - rect.left - drawCanvas.width/2;
+    let y = e.clientY - rect.top - drawCanvas.height/2;
+    paths.push({color:brushColor, size:brushSize, points:[{x:x/scale, y:y/scale}]});
+}
+drawCanvas.onmousemove=e=>{
+    if(!drawing) return;
+    let rect = drawCanvas.getBoundingClientRect();
+    let x = e.clientX - rect.left - drawCanvas.width/2;
+    let y = e.clientY - rect.top - drawCanvas.height/2;
+    paths[paths.length-1].points.push({x:x/scale, y:y/scale});
+    redrawDrawLayer();
+}
+drawCanvas.onmouseup=()=>drawing=false;
 
 function addText(){
- let t=prompt("Text:"); if(t){texts.push({txt:t,x:0,y:0,c:col,s:30});draw()}
+    let txt=prompt("Text likho:");
+    if(!txt) return;
+    let font=prompt("Font: Arial, Verdana, Courier", "Arial");
+    let color=prompt("Color: #ffffff", "#ffffff");
+    let x=0, y=-img.height/4; // top center
+    texts.push({txt,x,y,size:40,font:font||'Arial',color:color||'#fff'});
+    redrawDrawLayer();
 }
-document.querySelector("button[onclick=\"mode='text'\"]").onclick=addText
 
-function download(){let a=document.createElement('a');a.download="pic.jpg";a.href=c.toDataURL();a.click()}
+function zoom(f){scale=Math.max(0.5, Math.min(4, scale*f)); drawImage(); redrawDrawLayer();}
+function rotate(d){rot+=d; drawImage(); redrawDrawLayer();}
+function skew(s){sk+=s; drawImage(); redrawDrawLayer();}
+
+function save(){
+    let temp=document.createElement('canvas');
+    temp.width=img.width; temp.height=img.height;
+    let tctx=temp.getContext('2d');
+    tctx.drawImage(imgCanvas,0,0);
+    tctx.drawImage(drawCanvas,0,0);
+    let a=document.createElement('a');
+    a.download="edited.jpg"; a.href=temp.toDataURL('image/jpeg',0.9); a.click();
+}
 </script>
 </body>
 </html>

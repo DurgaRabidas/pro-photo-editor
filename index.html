@@ -1,123 +1,67 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Photo Editor Pro</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-    * { box-sizing: border-box; }
-    body { background: #121212; color: #eee; margin: 0; font-family: system-ui; }
-    h2 { margin: 10px 0; text-align: center; font-size: 18px; }
-   .main-wrap { display: flex; flex-direction: column; height: 100vh; }
-   .canvas-wrap { flex: 1; display: flex; justify-content: center; align-items: center; position: relative; padding: 10px; overflow: hidden; background: #000; }
-    #canvas { background: #111; touch-action: none; max-width: 100%; max-height: 100%; }
-    #upload-label { position: absolute; padding: 16px 32px; background: #4CAF50; color: white; border-radius: 12px; font-weight: bold; cursor: pointer; z-index: 10; }
-    #upload { display: none; }
-   .toolbar { background: #1f1f1f; padding: 10px; display: flex; gap: 8px; overflow-x: auto; border-top: 1px solid #333; }
-    button, input, select { padding: 10px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-size: 12px; }
-    button.active { background: #ff9800; }
-   .controls-box { background: #2a2a2a; padding: 10px; display: none; gap: 10px; align-items: center; }
-   .controls-box.active { display: flex; flex-wrap: wrap; }
-   .controls-box label { font-size: 12px; }
-    input[type=color] { width: 40px; height: 30px; padding: 2px; }
+body{background:#000;color:#fff;text-align:center;margin:0}
+canvas{background:#222;max-width:100%;max-height:70vh}
+button,input{margin:5px;padding:8px}
+#tools{display:none}
 </style>
 </head>
 <body>
-    <div class="main-wrap">
-        <h2>📷 Photo Editor Pro</h2>
-        <div class="canvas-wrap">
-            <label for="upload" id="upload-label">📁 Choose Image</label>
-            <input type="file" id="upload" accept="image/*">
-            <canvas id="canvas"></canvas>
-        </div>
-
-        <div id="controlsBox" class="controls-box">
-            <label>Size: <input type="range" id="sizeSlider" min="1" max="50" value="5"></label>
-            <label>Color: <input type="color" id="colorPicker" value="#ff0000"></label>
-        </div>
-
-        <div class="toolbar">
-            <button onclick="setMode('edit')" id="editBtn" class="active">✋ Move</button>
-            <button onclick="setMode('draw')" id="drawBtn">🖊️ Draw</button>
-            <button onclick="addText()">T Text</button>
-            <button onclick="undo()">↩️ Undo</button> <button onclick="redo()">↪️ Redo</button>
-            <button onclick="zoom(1.2)">🔍 +</button> <button onclick="zoom(0.8)">🔍 -</button>
-            <button onclick="rotate(-5)">↪️ L</button> <button onclick="rotate(5)">↩️ R</button>
-            <button onclick="skew(-5)">↗️ SkewL</button> <button onclick="skew(5)">↖️ SkewR</button>
-            <button onclick="openFilter('blur')">Blur</button> <button onclick="openFilter('contrast')">Contrast</button>
-            <button onclick="reset()">Reset</button> <button onclick="saveImg()">💾 Save</button>
-        </div>
-    </div>
+<h3>Photo Editor</h3>
+<input type="file" id="up">
+<br>
+<canvas id="c"></canvas>
+<br>
+<div id="tools">
+<button onclick="mode='draw'">Draw</button>
+<input type="color" id="col" value="#ff0000">
+<input type="range" id="size" min="1" max="30" value="5">
+<button onclick="mode='text'">Add Text</button>
+<button onclick="rot+=10;draw()">Rotate</button>
+<button onclick="skx+=0.1;draw()">Skew</button>
+<button onclick="download()">Save</button>
+</div>
 
 <script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-let img = new Image();
-let history = []; let step = -1;
-let state = {scale: 1, rotation: 0, skewX: 0, filters: {}, drawings: [], texts: []};
-let mode = 'edit'; let isDrawing = false; let isDragging = false;
-let brushColor = '#ff0000'; let brushSize = 5;
+let c=document.getElementById('c'),x=c.getContext('2d'),img=new Image(),mode='edit',drawing=0,rot=0,skx=0;
+let draws=[],texts=[],col="#ff0000",bs=5;
 
-document.getElementById('colorPicker').oninput = e => brushColor = e.target.value;
-document.getElementById('sizeSlider').oninput = e => brushSize = e.target.value;
+document.getElementById('up').onchange=e=>{img.src=URL.createObjectURL(e.target.files[0])}
+img.onload=()=>{c.width=img.width;c.height=img.height;document.getElementById('tools').style.display='block';draw()}
+document.getElementById('col').oninput=e=>col=e.target.value
+document.getElementById('size').oninput=e=>bs=e.target.value
 
-document.getElementById('upload').onchange = e => {
-    const file = e.target.files[0]; const url = URL.createObjectURL(file);
-    img.onload = () => { document.getElementById('upload-label').style.display = 'none'; canvas.width = img.width; canvas.height = img.height; pushState(); draw(); }
-    img.src = url;
+function draw(){
+ x.clearRect(0,0,c.width,c.height);
+ x.save();
+ x.translate(c.width/2,c.height/2);
+ x.rotate(rot*Math.PI/180);
+ x.transform(1,0,skx,1,0,0);
+ x.drawImage(img,-img.width/2,-img.height/2);
+ x.restore();
+
+ x.save();
+ x.translate(c.width/2,c.height/2);
+ x.rotate(rot*Math.PI/180);
+ x.transform(1,0,skx,1,0,0);
+ draws.forEach(d=>{x.strokeStyle=d.c;x.lineWidth=d.s;x.beginPath();d.p.forEach((p,i)=>i?x.lineTo(p.x,p.y):x.moveTo(p.x,p.y));x.stroke()})
+ texts.forEach(t=>{x.fillStyle=t.c;x.font=t.s+"px Arial";x.fillText(t.txt,t.x,t.y)})
+ x.restore();
 }
 
-function draw() {
-    if(!img.src) return; ctx.clearRect(0,0,canvas.width,canvas.height); ctx.save();
-    ctx.filter = Object.keys(state.filters).map(k => `${k}(${state.filters[k]})`).join(' ') || 'none';
-    ctx.translate(canvas.width/2, canvas.height/2);
-    ctx.scale(state.scale, state.scale);
-    ctx.rotate(state.rotation * Math.PI / 180);
-    ctx.transform(1, 0, Math.tan(state.skewX * Math.PI / 180), 1, 0, 0); // SKEW
-    ctx.drawImage(img, -img.width/2, -img.height/2); ctx.restore();
+c.onmousedown=e=>{if(mode=='draw'){drawing=1;draws.push({c:col,s:bs,p:[{x:e.offsetX-c.width/2,y:e.offsetY-c.height/2}]})}}
+c.onmousemove=e=>{if(drawing){draws[draws.length-1].p.push({x:e.offsetX-c.width/2,y:e.offsetY-c.height/2});draw()}}
+c.onmouseup=()=>{drawing=0}
 
-    // Draw drawings and text
-    ctx.save();
-    ctx.translate(canvas.width/2, canvas.height/2);
-    ctx.scale(state.scale, state.scale);
-    ctx.rotate(state.rotation * Math.PI / 180);
-    ctx.transform(1, 0, Math.tan(state.skewX * Math.PI / 180), 1, 0, 0);
-    state.drawings.forEach(d => { ctx.strokeStyle = d.color; ctx.lineWidth = d.size; ctx.beginPath(); d.path.forEach((p,i) => i===0? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y)); ctx.stroke(); });
-    state.texts.forEach(t => { ctx.font = `${t.size}px ${t.font}`; ctx.fillStyle = t.color; ctx.fillText(t.text, t.x, t.y); });
-    ctx.restore();
+function addText(){
+ let t=prompt("Text:"); if(t){texts.push({txt:t,x:0,y:0,c:col,s:30});draw()}
 }
+document.querySelector("button[onclick=\"mode='text'\"]").onclick=addText
 
-function getPos(e) { const rect = canvas.getBoundingClientRect(); return { x: e.clientX - rect.left - canvas.width/2, y: e.clientY - rect.top - canvas.height/2 }; }
-
-canvas.onmousedown = e => {
-    const pos = getPos(e);
-    if(mode === 'draw') { isDrawing = true; state.drawings.push({color: brushColor, size: brushSize, path: [pos]}); }
-    if(mode === 'edit') { isDragging = true; }
-}
-canvas.onmousemove = e => {
-    const pos = getPos(e);
-    if(isDrawing) { state.drawings[state.drawings.length-1].path.push(pos); draw(); }
-}
-canvas.onmouseup = () => { if(isDrawing || isDragging) pushState(); isDrawing = false; isDragging = false; }
-
-function setMode(m) { mode = m; document.querySelectorAll('.toolbar button').forEach(b => b.classList.remove('active')); document.getElementById(m+'Btn').classList.add('active'); document.getElementById('controlsBox').classList.toggle('active', m==='draw'); }
-function zoom(f) { state.scale *= f; draw(); pushState(); }
-function rotate(deg) { state.rotation += deg; draw(); pushState(); }
-function skew(deg) { state.skewX += deg; draw(); pushState(); } // SKEW FUNCTION
-function openFilter(type) { const val = prompt(`${type} value:`); if(val) { state.filters[type] = val; draw(); pushState(); } }
-function reset() { state = {scale: 1, rotation: 0, skewX: 0, filters: {}, drawings: [], texts: []}; draw(); pushState(); }
-function pushState() { history.push(JSON.parse(JSON.stringify(state))); step++; }
-function undo() { if(step > 0) { step--; state = JSON.parse(JSON.stringify(history[step])); draw(); } }
-function redo() { if(step < history.length-1) { step++; state = JSON.parse(JSON.stringify(history[step])); draw(); } }
-
-function addText() {
-    const text = prompt("Text likho:");
-    const font = prompt("Font: Arial, Verdana, Courier");
-    const color = prompt("Color code: #ffffff");
-    if(text) { state.texts.push({text, x: 0, y: 0, size: 40, font: font || 'Arial', color: color || '#fff'}); draw(); pushState(); }
-}
-
-function saveImg() { const link = document.createElement('a'); link.download = 'edited.jpg'; link.href = canvas.toDataURL(); link.click(); }
+function download(){let a=document.createElement('a');a.download="pic.jpg";a.href=c.toDataURL();a.click()}
 </script>
 </body>
 </html>

@@ -8,36 +8,22 @@
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     body { background: #121212; color: #eee; margin: 0; font-family: system-ui, sans-serif; }
     h2 { margin: 10px 0; text-align: center; font-size: 18px; font-weight: 600; }
-
-  .main-wrap { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
-  .canvas-wrap {
-        flex: 1; display: flex; justify-content: center; align-items: center;
-        position: relative; padding: 10px; overflow: hidden; background: #000; min-height: 200px;
-    }
-    #canvas {
-        border-radius: 12px; background: #111; display: block; touch-action: none;
-        max-width: 100%; max-height: 100%; width: auto; height: auto; cursor: grab;
-    }
-    #canvas.grabbing { cursor: grabbing; }
-
-    #upload-label {
-        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        padding: 16px 32px; background: #4CAF50; color: white;
-        border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 16px; z-index: 10; transition: 0.1s;
-    }
-    #upload-label:active { transform: translate(-50%, -50%) scale(0.95); }
-    #upload { display: none; }
-
-  .toolbar {
-        background: #1f1f1f; padding: 10px; display: flex;
-        gap: 8px; overflow-x: auto; border-top: 1px solid #333; flex-shrink: 0;
-    }
-  .toolbar::-webkit-scrollbar { height: 6px; }
-  .toolbar::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+.main-wrap { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+.canvas-wrap { flex: 1; display: flex; justify-content: center; align-items: center; position: relative; padding: 10px; overflow: hidden; background: #000; min-height: 200px; }
+    #canvas { border-radius: 12px; background: #111; display: block; touch-action: none; max-width: 100%; max-height: 100%; width: auto; height: auto; cursor: grab; }
+    #canvas.grabbing { cursor: grabbing; } #canvas.drawing { cursor: crosshair; }
+    #upload-label { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 16px 32px; background: #4CAF50; color: white; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 16px; z-index: 10; transition: 0.1s; }
+    #upload-label:active { transform: translate(-50%, -50%) scale(0.95); } #upload { display: none; }
+.toolbar { background: #1f1f1f; padding: 10px; display: flex; gap: 8px; overflow-x: auto; border-top: 1px solid #333; flex-shrink: 0; }
+.toolbar::-webkit-scrollbar { height: 6px; }.toolbar::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
     button { padding: 12px 10px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-weight: 600; font-size: 12px; white-space: nowrap; cursor: pointer; flex-shrink: 0; }
-    button.active { background: #ff9800; }
-    button:active { background: #45a049; }
-    button:disabled { background: #3a3a3a; color: #666; cursor: not-allowed; }
+    button.active { background: #ff9800; } button:active { background: #45a049; } button:disabled { background: #3a3a3a; color: #666; cursor: not-allowed; }
+
+    /* NAYA: SLIDER BOX */
+   .controls-box { background: #2a2a2a; padding: 10px; border-top: 1px solid #333; display: none; }
+   .controls-box.active { display: block; }
+   .controls-box label { font-size: 12px; margin-right: 8px; }
+   .controls-box input[type=range] { width: 100%; }
 </style>
 </head>
 <body>
@@ -48,25 +34,28 @@
             <input type="file" id="upload" accept="image/*">
             <canvas id="canvas"></canvas>
         </div>
+
+        <!-- NAYA: SLIDER BOX -->
+        <div id="controlsBox" class="controls-box">
+            <label id="controlLabel">Value</label>
+            <input type="range" id="controlSlider" min="0" max="200" value="100">
+        </div>
+
         <div class="toolbar">
             <button onclick="setMode('edit')" id="editBtn" class="active">✋ Move</button>
             <button onclick="setMode('draw')" id="drawBtn">🖊️ Draw</button>
             <button onclick="addText()">T Text</button>
             <button onclick="undo()" id="undoBtn" disabled>↩️ Undo</button>
             <button onclick="redo()" id="redoBtn" disabled>↪️ Redo</button>
-            <button onclick="zoom(1.25)">🔍 +</button>
-            <button onclick="zoom(0.8)">🔍 -</button>
-            <button onclick="rotate()">🔄 Rotate</button>
-            <button onclick="flip()">↔️ Flip</button>
-            
-            <!-- NAYE FILTER BUTTONS -->
-            <button onclick="setFilter('grayscale(100%)')">Gray</button>
-            <button onclick="setFilter('blur(3px)')">Blur</button>
-            <button onclick="setFilter('contrast(150%)')">Contrast</button>
-            <button onclick="setFilter('brightness(130%)')">Bright</button>
-            <button onclick="setFilter('sepia(100%)')">Sepia</button>
-            <button onclick="reset()">Reset</button>
-            <button onclick="saveImg()">💾 Save</button>
+            <button onclick="zoom(1.25)">🔍 +</button> <button onclick="zoom(0.8)">🔍 -</button>
+            <button onclick="rotate()">🔄 Rotate</button> <button onclick="flip()">↔️ Flip</button>
+
+            <button onclick="openFilter('blur')">Blur</button>
+            <button onclick="openFilter('contrast')">Contrast</button>
+            <button onclick="openFilter('brightness')">Bright</button>
+            <button onclick="openFilter('grayscale')">Gray</button>
+            <button onclick="openFilter('sepia')">Sepia</button>
+            <button onclick="reset()">Reset</button> <button onclick="saveImg()">💾 Save</button>
         </div>
     </div>
 
@@ -74,125 +63,120 @@
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const uploadLabel = document.getElementById('upload-label');
+const controlsBox = document.getElementById('controlsBox');
+const controlSlider = document.getElementById('controlSlider');
+const controlLabel = document.getElementById('controlLabel');
+
 let history = []; let step = -1;
 let img = new Image();
-let state = {scale: 1, filter: 'none', rotation: 0, flipped: 1, offsetX: 0, offsetY: 0};
-let mode = 'edit';
-let isDragging = false;
-let lastX = 0, lastY = 0;
+let state = {scale: 1, filters: {}, rotation: 0, flipped: 1, offsetX: 0, offsetY: 0, texts: [], drawings: []};
+let mode = 'edit'; let isDragging = false, isDrawing = false; let lastX = 0, lastY = 0;
+let currentFilter = null;
 
-function fitCanvas() {
-    if(!img.src) return;
-    let w = img.width; let h = img.height;
-    if(state.rotation % 180 !== 0) [w, h] = [h, w];
-    canvas.width = w;
-    canvas.height = h;
-}
+function fitCanvas() { if(!img.src) return; let w = img.width; let h = img.height; if(state.rotation % 180!== 0) [w, h] = [h, w]; canvas.width = w; canvas.height = h; }
 
 document.getElementById('upload').onchange = (e) => {
-    const file = e.target.files[0];
-    if(!file) return;
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-        uploadLabel.style.display = 'none';
-        history = []; step = -1;
-        state = {scale: 1, filter: 'none', rotation: 0, flipped: 1, offsetX: 0, offsetY: 0};
-        fitCanvas(); draw(); pushState();
-        URL.revokeObjectURL(url);
-    }
+    const file = e.target.files[0]; if(!file) return; const url = URL.createObjectURL(file);
+    img.onload = () => { uploadLabel.style.display = 'none'; history = []; step = -1; state = {scale: 1, filters: {}, rotation: 0, flipped: 1, offsetX: 0, offsetY: 0, texts: [], drawings: []}; fitCanvas(); draw(); pushState(); URL.revokeObjectURL(url); }
     img.src = url;
 }
 
+function getFilterString() {
+    let f = [];
+    if(state.filters.blur) f.push(`blur(${state.filters.blur}px)`);
+    if(state.filters.contrast) f.push(`contrast(${state.filters.contrast}%)`);
+    if(state.filters.brightness) f.push(`brightness(${state.filters.brightness}%)`);
+    if(state.filters.grayscale) f.push(`grayscale(${state.filters.grayscale}%)`);
+    if(state.filters.sepia) f.push(`sepia(${state.filters.sepia}%)`);
+    return f.join(' ') || 'none';
+}
+
 function draw() {
-    if(!img.src) return;
-    fitCanvas();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if(!img.src) return; fitCanvas(); ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.save();
+    ctx.filter = getFilterString();
+    ctx.translate(canvas.width/2 + state.offsetX, canvas.height/2 + state.offsetY); ctx.scale(state.flipped * state.scale, state.scale); ctx.rotate(state.rotation * Math.PI / 180);
+    ctx.drawImage(img, -img.width/2, -img.height/2); ctx.restore();
+
+    // FIX: Drawings aur Text ko bhi same transform dena hai
     ctx.save();
-    ctx.filter = state.filter; // Yahi filter apply hota hai
-    ctx.translate(canvas.width/2 + state.offsetX, canvas.height/2 + state.offsetY);
-    ctx.scale(state.flipped * state.scale, state.scale);
-    ctx.rotate(state.rotation * Math.PI / 180);
-    ctx.drawImage(img, -img.width/2, -img.height/2);
+    ctx.translate(canvas.width/2 + state.offsetX, canvas.height/2 + state.offsetY); ctx.scale(state.flipped * state.scale, state.scale); ctx.rotate(state.rotation * Math.PI / 180);
+    ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 3 / state.scale; // line zoom ke saath moti na ho
+    state.drawings.forEach(d => { ctx.beginPath(); ctx.moveTo(d.path[0].x, d.path[0].y); d.path.forEach(p => ctx.lineTo(p.x, p.y)); ctx.stroke(); });
+    ctx.font = `${40 / state.scale}px system-ui`; ctx.fillStyle = 'white'; ctx.textAlign = 'center'; // text bhi zoom ke saath
+    state.texts.forEach(t => { ctx.fillText(t.text, t.x, t.y); });
     ctx.restore();
 }
 
 function getPos(e) {
     const rect = canvas.getBoundingClientRect();
+    // FIX: Zoom/rotate ka hisaab laga ke coordinate nikalna
+    const x = (e.touches? e.touches[0].clientX : e.clientX) - rect.left - rect.width/2;
+    const y = (e.touches? e.touches[0].clientY : e.clientY) - rect.top - rect.height/2;
+    const scale = state.scale;
     return {
-        x: (e.touches ? e.touches[0].clientX : e.clientX) - rect.left,
-        y: (e.touches ? e.touches[0].clientY : e.clientY) - rect.top
+        x: (x / scale) - state.offsetX/scale,
+        y: (y / scale) - state.offsetY/scale
     };
 }
 
 canvas.onmousedown = canvas.ontouchstart = (e) => {
-    if(mode !== 'edit') return;
-    isDragging = true; canvas.classList.add('grabbing');
-    const pos = getPos(e); lastX = pos.x; lastY = pos.y;
+    e.preventDefault(); const pos = getPos(e);
+    if(mode === 'edit') { isDragging = true; canvas.classList.add('grabbing'); lastX = pos.x; lastY = pos.y; }
+    if(mode === 'draw') { isDrawing = true; canvas.classList.add('drawing'); state.drawings.push({path: [{x: pos.x, y: pos.y}]}); }
 }
-
 canvas.onmousemove = canvas.ontouchmove = (e) => {
-    if(!isDragging || mode !== 'edit') return;
-    e.preventDefault();
-    const pos = getPos(e);
-    state.offsetX += pos.x - lastX;
-    state.offsetY += pos.y - lastY;
-    lastX = pos.x; lastY = pos.y;
-    draw();
+    e.preventDefault(); const pos = getPos(e);
+    if(isDragging && mode === 'edit') { state.offsetX += (pos.x - lastX) * state.scale; state.offsetY += (pos.y - lastY) * state.scale; lastX = pos.x; lastY = pos.y; draw(); }
+    if(isDrawing && mode === 'draw') { state.drawings[state.drawings.length - 1].path.push({x: pos.x, y: pos.y}); draw(); }
 }
+canvas.onmouseup = canvas.ontouchend = () => { if(isDragging || isDrawing) { isDragging = false; isDrawing = false; canvas.classList.remove('grabbing', 'drawing'); pushState(); } }
 
-canvas.onmouseup = canvas.ontouchend = () => {
-    if(isDragging) { isDragging = false; canvas.classList.remove('grabbing'); pushState(); }
-}
+function pushState() { if(step < history.length - 1) history.length = step + 1; history.push(JSON.parse(JSON.stringify(state))); step++; updateBtns(); }
+function restoreState(s) { state = JSON.parse(JSON.stringify(history[s])); draw(); updateBtns(); }
+function updateBtns() { document.getElementById('undoBtn').disabled = step <= 0; document.getElementById('redoBtn').disabled = step >= history.length - 1; }
 
-function pushState() {
-    if(step < history.length - 1) history.length = step + 1;
-    history.push(JSON.parse(JSON.stringify(state)));
-    step++; updateBtns();
-}
-function restoreState(s) {
-    state = JSON.parse(JSON.stringify(history[s])); draw(); updateBtns();
-}
-function updateBtns() {
-    document.getElementById('undoBtn').disabled = step <= 0;
-    document.getElementById('redoBtn').disabled = step >= history.length - 1;
-}
-
-function setMode(m) {
-    mode = m;
-    document.querySelectorAll('.toolbar button').forEach(b => b.classList.remove('active'));
-    document.getElementById(m+'Btn').classList.add('active');
-}
-
+function setMode(m) { mode = m; controlsBox.classList.remove('active'); document.querySelectorAll('.toolbar button').forEach(b => b.classList.remove('active')); document.getElementById(m+'Btn').classList.add('active'); }
 function zoom(f) { state.scale = Math.max(0.3, Math.min(5, state.scale * f)); draw(); pushState(); }
 function rotate() { state.rotation = (state.rotation + 90) % 360; state.offsetX = 0; state.offsetY = 0; draw(); pushState(); }
 function flip() { state.flipped *= -1; draw(); pushState(); }
-function setFilter(f) { state.filter = f; draw(); pushState(); } // Filter yaha set hota hai
-function reset() { state = {scale: 1, filter: 'none', rotation: 0, flipped: 1, offsetX: 0, offsetY: 0}; draw(); pushState(); }
+
+// NAYA: Filter slider kholne ka function
+function openFilter(type) {
+    currentFilter = type;
+    controlsBox.classList.add('active');
+    if(type === 'blur') { controlLabel.innerText = 'Blur: ' + (state.filters.blur || 0) + 'px'; controlSlider.min=0; controlSlider.max=10; controlSlider.value=state.filters.blur || 0; }
+    if(type === 'contrast') { controlLabel.innerText = 'Contrast: ' + (state.filters.contrast || 100) + '%'; controlSlider.min=50; controlSlider.max=200; controlSlider.value=state.filters.contrast || 100; }
+    if(type === 'brightness') { controlLabel.innerText = 'Brightness: ' + (state.filters.brightness || 100) + '%'; controlSlider.min=50; controlSlider.max=200; controlSlider.value=state.filters.brightness || 100; }
+    if(type === 'grayscale') { controlLabel.innerText = 'Gray: ' + (state.filters.grayscale || 0) + '%'; controlSlider.min=0; controlSlider.max=100; controlSlider.value=state.filters.grayscale || 0; }
+    if(type === 'sepia') { controlLabel.innerText = 'Sepia: ' + (state.filters.sepia || 0) + '%'; controlSlider.min=0; controlSlider.max=100; controlSlider.value=state.filters.sepia || 0; }
+}
+
+controlSlider.oninput = () => {
+    state.filters[currentFilter] = parseInt(controlSlider.value);
+    openFilter(currentFilter); // label update
+    draw();
+}
+controlSlider.onchange = () => pushState(); // slider chhodne pe save
+
+function reset() { state = {scale: 1, filters: {}, rotation: 0, flipped: 1, offsetX: 0, offsetY: 0, texts: [], drawings: []}; controlsBox.classList.remove('active'); draw(); pushState(); }
 function undo() { if(step > 0) { step--; restoreState(step); } }
 function redo() { if(step < history.length - 1) { step++; restoreState(step); } }
 
 function addText() {
     const text = prompt("Text likho:");
     if(text) {
-        ctx.font = '40px system-ui'; ctx.fillStyle = 'white'; ctx.textAlign = 'center';
-        ctx.fillText(text, canvas.width/2, 80); pushState();
+        // FIX: Text ko center me add karo
+        state.texts.push({text: text, x: 0, y: -img.height/2 + 60});
+        draw(); pushState();
     }
 }
 
-function saveImg() {
-    if(!img.src) return alert("Pehle image select karo");
-    const temp = document.createElement('canvas');
-    let w = img.width; let h = img.height;
-    if(state.rotation % 180 !== 0) [w, h] = [h, w];
-    temp.width = w; temp.height = h;
-    const tctx = temp.getContext('2d');
-    tctx.filter = state.filter;
-    tctx.translate(temp.width/2, temp.height/2);
-    tctx.scale(state.flipped, 1);
-    tctx.rotate(state.rotation * Math.PI / 180);
-    tctx.drawImage(img, -img.width/2, -img.height/2);
-    const link = document.createElement('a');
-    link.download = 'edited.jpg'; link.href = temp.toDataURL('image/jpeg', 0.95); link.click();
+function saveImg() { if(!img.src) return alert("Pehle image select karo"); const temp = document.createElement('canvas'); let w = img.width; let h = img.height; if(state.rotation % 180!== 0) [w, h] = [h, w]; temp.width = w; temp.height = h; const tctx = temp.getContext('2d'); tctx.filter = getFilterString(); tctx.translate(temp.width/2, temp.height/2); tctx.scale(state.flipped, 1); tctx.rotate(state.rotation * Math.PI / 180); tctx.drawImage(img, -img.width/2, -img.height/2);
+    tctx.strokeStyle = '#ff0000'; tctx.lineWidth = 3;
+    state.drawings.forEach(d => { tctx.beginPath(); tctx.moveTo(d.path[0].x, d.path[0].y); d.path.forEach(p => tctx.lineTo(p.x, p.y)); tctx.stroke(); });
+    tctx.font = '40px system-ui'; tctx.fillStyle = 'white'; tctx.textAlign = 'center';
+    state.texts.forEach(t => { tctx.fillText(t.text, t.x, t.y); });
+    const link = document.createElement('a'); link.download = 'edited.jpg'; link.href = temp.toDataURL('image/jpeg', 0.95); link.click();
 }
 </script>
 </body>

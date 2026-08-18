@@ -2,88 +2,122 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Photo Editor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Photo Editor Pro</title>
 <style>
-body { background: #121212; color: #eee; margin: 0; font-family: sans-serif; text-align: center; }
-.canvas-wrap { padding: 10px; height: 70vh; display: flex; justify-content: center; align-items: center; background: #000; }
-#canvas { max-width: 100%; max-height: 100%; background: #222; touch-action: none; }
-.toolbar { padding: 10px; background: #1f1f1f; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
-button { padding: 10px; background: #4CAF50; color: white; border: none; border-radius: 8px; }
-#upload-label { padding: 15px 30px; background: #4CAF50; border-radius: 10px; display: inline-block; margin-top: 20px; }
-#upload { display: none; }
-#sliderBox { display: none; background: #333; padding: 10px; }
+    * { box-sizing: border-box; }
+    body { background: #121212; color: #eee; margin: 0; font-family: system-ui; }
+    h2 { margin: 10px 0; text-align: center; font-size: 18px; }
+   .main-wrap { display: flex; flex-direction: column; height: 100vh; }
+   .canvas-wrap { flex: 1; display: flex; justify-content: center; align-items: center; position: relative; padding: 10px; overflow: hidden; background: #000; }
+    #canvas { background: #111; touch-action: none; max-width: 100%; max-height: 100%; }
+    #upload-label { position: absolute; padding: 16px 32px; background: #4CAF50; color: white; border-radius: 12px; font-weight: bold; cursor: pointer; z-index: 10; }
+    #upload { display: none; }
+   .toolbar { background: #1f1f1f; padding: 10px; display: flex; gap: 8px; overflow-x: auto; border-top: 1px solid #333; }
+    button, input, select { padding: 10px; background: #4CAF50; color: white; border: none; border-radius: 8px; font-size: 12px; }
+    button.active { background: #ff9800; }
+   .controls-box { background: #2a2a2a; padding: 10px; display: none; gap: 10px; align-items: center; }
+   .controls-box.active { display: flex; flex-wrap: wrap; }
+   .controls-box label { font-size: 12px; }
+    input[type=color] { width: 40px; height: 30px; padding: 2px; }
 </style>
 </head>
 <body>
-<h2>📷 Photo Editor</h2>
+    <div class="main-wrap">
+        <h2>📷 Photo Editor Pro</h2>
+        <div class="canvas-wrap">
+            <label for="upload" id="upload-label">📁 Choose Image</label>
+            <input type="file" id="upload" accept="image/*">
+            <canvas id="canvas"></canvas>
+        </div>
 
-<div class="canvas-wrap">
-    <label for="upload" id="upload-label">📁 Choose Image</label>
-    <input type="file" id="upload" accept="image/*">
-    <canvas id="canvas"></canvas>
-</div>
+        <div id="controlsBox" class="controls-box">
+            <label>Size: <input type="range" id="sizeSlider" min="1" max="50" value="5"></label>
+            <label>Color: <input type="color" id="colorPicker" value="#ff0000"></label>
+        </div>
 
-<div id="sliderBox">
-    <span id="sliderLabel"></span>
-    <input type="range" id="slider" min="0" max="100" value="50">
-</div>
-
-<div class="toolbar">
-    <button onclick="setFilter('blur')">Blur</button>
-    <button onclick="setFilter('contrast')">Contrast</button>
-    <button onclick="setFilter('brightness')">Bright</button>
-    <button onclick="zoom(1.2)">Zoom +</button>
-    <button onclick="zoom(0.8)">Zoom -</button>
-    <button onclick="download()">Save</button>
-</div>
+        <div class="toolbar">
+            <button onclick="setMode('edit')" id="editBtn" class="active">✋ Move</button>
+            <button onclick="setMode('draw')" id="drawBtn">🖊️ Draw</button>
+            <button onclick="addText()">T Text</button>
+            <button onclick="undo()">↩️ Undo</button> <button onclick="redo()">↪️ Redo</button>
+            <button onclick="zoom(1.2)">🔍 +</button> <button onclick="zoom(0.8)">🔍 -</button>
+            <button onclick="rotate(-5)">↪️ L</button> <button onclick="rotate(5)">↩️ R</button>
+            <button onclick="skew(-5)">↗️ SkewL</button> <button onclick="skew(5)">↖️ SkewR</button>
+            <button onclick="openFilter('blur')">Blur</button> <button onclick="openFilter('contrast')">Contrast</button>
+            <button onclick="reset()">Reset</button> <button onclick="saveImg()">💾 Save</button>
+        </div>
+    </div>
 
 <script>
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 let img = new Image();
-let scale = 1;
-let filters = {blur: 0, contrast: 100, brightness: 100};
+let history = []; let step = -1;
+let state = {scale: 1, rotation: 0, skewX: 0, filters: {}, drawings: [], texts: []};
+let mode = 'edit'; let isDrawing = false; let isDragging = false;
+let brushColor = '#ff0000'; let brushSize = 5;
+
+document.getElementById('colorPicker').oninput = e => brushColor = e.target.value;
+document.getElementById('sizeSlider').oninput = e => brushSize = e.target.value;
 
 document.getElementById('upload').onchange = e => {
-    const file = e.target.files[0];
-    img.onload = () => {
-        document.getElementById('upload-label').style.display = 'none';
-        canvas.width = img.width;
-        canvas.height = img.height;
-        draw();
-    }
-    img.src = URL.createObjectURL(file);
+    const file = e.target.files[0]; const url = URL.createObjectURL(file);
+    img.onload = () => { document.getElementById('upload-label').style.display = 'none'; canvas.width = img.width; canvas.height = img.height; pushState(); draw(); }
+    img.src = url;
 }
 
 function draw() {
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.filter = `blur(${filters.blur}px) contrast(${filters.contrast}%) brightness(${filters.brightness}%)`;
+    if(!img.src) return; ctx.clearRect(0,0,canvas.width,canvas.height); ctx.save();
+    ctx.filter = Object.keys(state.filters).map(k => `${k}(${state.filters[k]})`).join(' ') || 'none';
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.scale(state.scale, state.scale);
+    ctx.rotate(state.rotation * Math.PI / 180);
+    ctx.transform(1, 0, Math.tan(state.skewX * Math.PI / 180), 1, 0, 0); // SKEW
+    ctx.drawImage(img, -img.width/2, -img.height/2); ctx.restore();
+
+    // Draw drawings and text
     ctx.save();
     ctx.translate(canvas.width/2, canvas.height/2);
-    ctx.scale(scale, scale);
-    ctx.drawImage(img, -img.width/2, -img.height/2);
+    ctx.scale(state.scale, state.scale);
+    ctx.rotate(state.rotation * Math.PI / 180);
+    ctx.transform(1, 0, Math.tan(state.skewX * Math.PI / 180), 1, 0, 0);
+    state.drawings.forEach(d => { ctx.strokeStyle = d.color; ctx.lineWidth = d.size; ctx.beginPath(); d.path.forEach((p,i) => i===0? ctx.moveTo(p.x,p.y) : ctx.lineTo(p.x,p.y)); ctx.stroke(); });
+    state.texts.forEach(t => { ctx.font = `${t.size}px ${t.font}`; ctx.fillStyle = t.color; ctx.fillText(t.text, t.x, t.y); });
     ctx.restore();
 }
 
-function zoom(f) { scale *= f; draw(); }
+function getPos(e) { const rect = canvas.getBoundingClientRect(); return { x: e.clientX - rect.left - canvas.width/2, y: e.clientY - rect.top - canvas.height/2 }; }
 
-function setFilter(type) {
-    document.getElementById('sliderBox').style.display = 'block';
-    document.getElementById('sliderLabel').innerText = type;
-    document.getElementById('slider').value = filters[type];
-    document.getElementById('slider').oninput = e => {
-        filters[type] = e.target.value;
-        draw();
-    }
+canvas.onmousedown = e => {
+    const pos = getPos(e);
+    if(mode === 'draw') { isDrawing = true; state.drawings.push({color: brushColor, size: brushSize, path: [pos]}); }
+    if(mode === 'edit') { isDragging = true; }
+}
+canvas.onmousemove = e => {
+    const pos = getPos(e);
+    if(isDrawing) { state.drawings[state.drawings.length-1].path.push(pos); draw(); }
+}
+canvas.onmouseup = () => { if(isDrawing || isDragging) pushState(); isDrawing = false; isDragging = false; }
+
+function setMode(m) { mode = m; document.querySelectorAll('.toolbar button').forEach(b => b.classList.remove('active')); document.getElementById(m+'Btn').classList.add('active'); document.getElementById('controlsBox').classList.toggle('active', m==='draw'); }
+function zoom(f) { state.scale *= f; draw(); pushState(); }
+function rotate(deg) { state.rotation += deg; draw(); pushState(); }
+function skew(deg) { state.skewX += deg; draw(); pushState(); } // SKEW FUNCTION
+function openFilter(type) { const val = prompt(`${type} value:`); if(val) { state.filters[type] = val; draw(); pushState(); } }
+function reset() { state = {scale: 1, rotation: 0, skewX: 0, filters: {}, drawings: [], texts: []}; draw(); pushState(); }
+function pushState() { history.push(JSON.parse(JSON.stringify(state))); step++; }
+function undo() { if(step > 0) { step--; state = JSON.parse(JSON.stringify(history[step])); draw(); } }
+function redo() { if(step < history.length-1) { step++; state = JSON.parse(JSON.stringify(history[step])); draw(); } }
+
+function addText() {
+    const text = prompt("Text likho:");
+    const font = prompt("Font: Arial, Verdana, Courier");
+    const color = prompt("Color code: #ffffff");
+    if(text) { state.texts.push({text, x: 0, y: 0, size: 40, font: font || 'Arial', color: color || '#fff'}); draw(); pushState(); }
 }
 
-function download() {
-    const link = document.createElement('a');
-    link.download = 'photo.jpg';
-    link.href = canvas.toDataURL();
-    link.click();
-}
+function saveImg() { const link = document.createElement('a'); link.download = 'edited.jpg'; link.href = canvas.toDataURL(); link.click(); }
 </script>
 </body>
 </html>

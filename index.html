@@ -3,139 +3,375 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Photo Editor Tested</title>
+<title>Pro Photo Editor v2</title>
 <style>
-body {background:#121212; color:#fff; margin:0; font-family:system-ui; text-align:center}
-#wrap {position:relative; width:100%; height:70vh; background:#000; display:flex; justify-content:center; align-items:center; overflow:hidden}
-canvas {position:absolute; max-width:100%; max-height:100%; touch-action:none}
-#tools {background:#1f1f1f; padding:10px; display:flex; flex-wrap:wrap; gap:8px; justify-content:center; border-top:1px solid #333}
-button,input{padding:10px; border:none; border-radius:8px; background:#4CAF50; color:#fff; font-weight:600; cursor:pointer}
-button:active{background:#45a049}
-#upload-label{padding:16px 32px; background:#4CAF50; border-radius:12px; display:inline-block; margin:20px; font-weight:bold; cursor:pointer}
-#upload{display:none}
+    body {background:#121212; color:#eee; margin:0; font-family:system-ui; display:flex; flex-direction:column; height:100vh}
+    h3 {text-align:center; margin:10px 0}
+    #wrap {flex:1; position:relative; background:#000; display:flex; justify-content:center; align-items:center; overflow:hidden}
+    canvas {position:absolute; max-width:100%; max-height:100%; touch-action:none}
+    #toolbar {background:#1f1f1f; padding:8px; display:flex; gap:8px; overflow-x:auto; border-top:1px solid #333}
+    #subtools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:10px}
+    #subtools.active {display:flex}
+  .row {display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    button, input, select {padding:8px 12px; background:#4CAF50; color:#fff; border:none; border-radius:8px; font-size:14px; cursor:pointer}
+    button.active {background:#ff9800}
+    button.danger {background:#f44336}
+    input[type=color] {width:40px; height:35px; padding:2px}
+    #colorPresets {display:flex; gap:6px; flex-wrap:wrap}
+  .color-dot {width:28px; height:28px; border-radius:50%; border:2px solid #555; cursor:pointer}
+  .color-dot.active {border:2px solid #fff}
+    #upload-label {padding:15px 30px; background:#4CAF50; border-radius:10px; cursor:pointer}
+    #upload {display:none}
+  .crop-box {position:absolute; border:2px dashed #fff; background:rgba(0,0,0,0.3); display:none}
+    #cropHint {position:absolute; bottom:8px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); padding:6px 12px; border-radius:6px; font-size:12px; display:none; white-space:nowrap}
 </style>
 </head>
 <body>
-<h3>📷 Photo Editor Tested</h3>
+<h3>📷 Pro Photo Editor v2</h3>
 
 <div id="wrap">
-    <canvas id="imgCanvas"></canvas>
-    <canvas id="drawCanvas"></canvas>
+    <label for="upload" id="upload-label">📁 Choose Image</label>
+    <input type="file" id="upload" accept="image/*">
+    <canvas id="mainCanvas"></canvas>
+    <div id="cropBox" class="crop-box"></div>
+    <div id="cropHint">Drag to draw a crop box, then double-tap the ✂️ Crop button to apply</div>
 </div>
-<label for="upload" id="upload-label">📁 Choose Image</label>
-<input type="file" id="upload" accept="image/*">
 
-<div id="tools">
-    <input type="color" id="color" value="#ff0000" title="Brush Color">
-    <input type="range" id="size" min="2" max="50" value="5" title="Brush Size">
-    <button onclick="mode='draw'">🖊️ Draw</button>
-    <button onclick="addText()">T Text</button>
-    <button onclick="rotate(-5)">↪️ Rotate L</button>
-    <button onclick="rotate(5)">↩️ Rotate R</button>
-    <button onclick="skew(-0.1)">↗️ Skew L</button>
-    <button onclick="skew(0.1)">↖️ Skew R</button>
-    <button onclick="zoom(1.2)">🔍 +</button>
-    <button onclick="zoom(0.8)">🔍 -</button>
-    <button onclick="save()">💾 Save</button>
+<div id="subtools">
+    <div class="row">
+        <label>Size: <input type="range" id="brushSize" min="1" max="80" value="5"></label>
+        <span id="sizeVal">5px</span>
+    </div>
+    <div class="row">
+        <label>Color: <input type="color" id="brushColor" value="#ff0000"></label>
+        <div id="colorPresets"></div>
+    </div>
+    <div class="row">
+        <button onclick="undo()">↩️ Undo</button>
+        <button onclick="redo()">↪️ Redo</button>
+    </div>
+</div>
+
+<div id="toolbar">
+    <button id="btnMove" onclick="setMode('move')" class="active">✋ Move</button>
+    <button id="btnDraw" onclick="setMode('draw')">🖊️ Draw</button>
+    <button id="btnText" onclick="setMode('text')">T Text</button>
+    <button id="btnCrop" onclick="setMode('crop')">✂️ Crop</button>
+    <button onclick="transform('rotate',-5)">↪️ Rot L</button>
+    <button onclick="transform('rotate',5)">↩️ Rot R</button>
+    <button onclick="transform('skew',-0.1)">↗️ Skew L</button>
+    <button onclick="transform('skew',0.1)">↖️ Skew R</button>
+    <button onclick="transform('zoom',1.2)">🔍 +</button>
+    <button onclick="transform('zoom',0.8)">🔍 -</button>
+    <button onclick="resetAll()" class="danger">Reset</button>
+    <button onclick="saveImage()">💾 Save</button>
 </div>
 
 <script>
-let imgCanvas = document.getElementById('imgCanvas');
-let drawCanvas = document.getElementById('drawCanvas');
-let ictx = imgCanvas.getContext('2d');
-let dctx = drawCanvas.getContext('2d');
+const canvas = document.getElementById('mainCanvas');
+const ctx = canvas.getContext('2d');
+const cropBox = document.getElementById('cropBox');
+const wrap = document.getElementById('wrap');
+const cropHint = document.getElementById('cropHint');
+
 let img = new Image();
-let scale=1, rot=0, sk=0, mode='edit', drawing=false;
-let brushColor='#ff0000', brushSize=5;
-let texts=[], paths=[]; // paths for undo
+let mode = 'move';
+let drawing = false;
+let selectedObj = null; // for text selection
+let history = []; let step = -1;
+let cropStart = null; // {x,y} in wrap-relative CSS px
 
-document.getElementById('color').oninput=e=>brushColor=e.target.value;
-document.getElementById('size').oninput=e=>brushSize=e.target.value;
+let state = {
+    scale:1, rot:0, skew:0,
+    filters:{},
+    drawings: [], // {color, size, points:[]}  -- points are in CONTENT space (pre-transform)
+    texts: [] // {txt,x,y,size,font,color,rot,skew} -- x,y are in CONTENT space
+};
+let brush = {color:'#ff0000', size:5};
 
-document.getElementById('upload').onchange=e=>{
+// COLOR PRESETS
+const presets = ['#ff0000','#00ff00','#0000ff','#ffff00','#ff00ff','#00ffff','#000','#ffffff','#ff9800','#9c27b0'];
+const presetDiv = document.getElementById('colorPresets');
+presets.forEach(c=>{
+    let d=document.createElement('div'); d.className='color-dot'; d.style.background=c;
+    d.onclick=()=>{brush.color=c; document.getElementById('brushColor').value=c; updateActivePreset(c)}
+    presetDiv.appendChild(d);
+})
+function updateActivePreset(c){ document.querySelectorAll('.color-dot').forEach(d=>d.classList.toggle('active', d.style.background===c)) }
+updateActivePreset('#ff0000');
+
+document.getElementById('brushColor').oninput = e => {brush.color = e.target.value; updateActivePreset(e.target.value)}
+document.getElementById('brushSize').oninput = e => {brush.size = e.target.value; document.getElementById('sizeVal').innerText=e.target.value+'px'}
+
+document.getElementById('upload').onchange = e => {
     let file = e.target.files[0]; if(!file) return;
     img.src = URL.createObjectURL(file);
-    document.getElementById('upload-label').style.display='none';
+    document.getElementById('upload-label').style.display = 'none';
 }
-img.onload=()=>{
-    imgCanvas.width = drawCanvas.width = img.width;
-    imgCanvas.height = drawCanvas.height = img.height;
-    drawImage();
-}
-
-function drawImage(){
-    ictx.clearRect(0,0,imgCanvas.width,imgCanvas.height);
-    ictx.save();
-    ictx.translate(imgCanvas.width/2, imgCanvas.height/2);
-    ictx.scale(scale,scale);
-    ictx.rotate(rot*Math.PI/180);
-    ictx.transform(1,0,sk,1,0,0);
-    ictx.drawImage(img,-img.width/2,-img.height/2);
-    ictx.restore();
+img.onload = () => {
+    canvas.width = img.width; canvas.height = img.height;
+    pushState(); render();
 }
 
-function redrawDrawLayer(){
-    dctx.clearRect(0,0,drawCanvas.width,drawCanvas.height);
-    dctx.save();
-    dctx.translate(drawCanvas.width/2, drawCanvas.height/2);
-    dctx.scale(scale,scale);
-    dctx.rotate(rot*Math.PI/180);
-    dctx.transform(1,0,sk,1,0,0);
+function setMode(m){
+    mode = m;
+    document.querySelectorAll('#toolbar button').forEach(b=>b.classList.remove('active'));
+    document.getElementById('btn'+m.charAt(0).toUpperCase()+m.slice(1)).classList.add('active');
+    document.getElementById('subtools').classList.toggle('active', m==='draw');
+    cropBox.style.display = 'none';
+    cropHint.style.display = m==='crop' ? 'block' : 'none';
+    cropStart = null;
+}
 
-    // Draw all saved paths
-    paths.forEach(p=>{
-        dctx.strokeStyle=p.color; dctx.lineWidth=p.size; dctx.lineCap='round';
-        dctx.beginPath(); p.points.forEach((pt,i)=> i==0? dctx.moveTo(pt.x,pt.y) : dctx.lineTo(pt.x,pt.y)); dctx.stroke();
+function render(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.save();
+    applyTransforms(ctx);
+
+    // 1. Draw Image with filters
+    ctx.filter = Object.entries(state.filters).map(([k,v])=>`${k}(${v})`).join(' ') || 'none';
+    ctx.drawImage(img,0,0);
+    ctx.filter = 'none';
+
+    // 2. Draw all paths
+    state.drawings.forEach(d=>{
+        ctx.strokeStyle=d.color; ctx.lineWidth=d.size; ctx.lineCap='round'; ctx.lineJoin='round';
+        ctx.beginPath(); d.points.forEach((p,i)=> i===0? ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)); ctx.stroke();
     });
 
-    // Draw all texts
-    texts.forEach(t=>{
-        dctx.fillStyle=t.color; dctx.font=`${t.size}px ${t.font}`; dctx.fillText(t.txt,t.x,t.y);
+    // 3. Draw all texts with individual rotate/skew
+    state.texts.forEach(t=>{
+        ctx.save();
+        ctx.translate(t.x, t.y);
+        ctx.rotate(t.rot * Math.PI/180);
+        ctx.transform(1,0,t.skew,1,0,0);
+        ctx.fillStyle=t.color;
+        ctx.font=`${t.size}px ${t.font}`;
+        ctx.fillText(t.txt,0,0);
+        // selection box
+        if(selectedObj === t){
+            let w = ctx.measureText(t.txt).width;
+            ctx.strokeStyle='#00ff00'; ctx.lineWidth=2;
+            ctx.strokeRect(-5,-t.size, w+10, t.size+10);
+        }
+        ctx.restore();
     });
-    dctx.restore();
+    ctx.restore();
 }
 
-drawCanvas.onmousedown=e=>{
-    if(mode!='draw') return;
-    drawing=true;
-    let rect = drawCanvas.getBoundingClientRect();
-    let x = e.clientX - rect.left - drawCanvas.width/2;
-    let y = e.clientY - rect.top - drawCanvas.height/2;
-    paths.push({color:brushColor, size:brushSize, points:[{x:x/scale, y:y/scale}]});
+function applyTransforms(ctx){
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.scale(state.scale, state.scale);
+    ctx.rotate(state.rot * Math.PI/180);
+    ctx.transform(1,0,state.skew,1,0,0);
+    ctx.translate(-canvas.width/2, -canvas.height/2);
 }
-drawCanvas.onmousemove=e=>{
-    if(!drawing) return;
-    let rect = drawCanvas.getBoundingClientRect();
-    let x = e.clientX - rect.left - drawCanvas.width/2;
-    let y = e.clientY - rect.top - drawCanvas.height/2;
-    paths[paths.length-1].points.push({x:x/scale, y:y/scale});
-    redrawDrawLayer();
-}
-drawCanvas.onmouseup=()=>drawing=false;
 
-function addText(){
-    let txt=prompt("Text likho:");
+// BUG FIX #1: map a pointer event to CONTENT-space coordinates (i.e. the
+// coordinate system the image/drawings/text actually live in), correctly
+// accounting for (a) the canvas being CSS-scaled to fit the screen and
+// (b) the current zoom/rotate/skew transform. Without this, drawing/text
+// placement drifts off the cursor as soon as the image is large or the
+// canvas has been zoomed/rotated.
+function getContentPos(clientX, clientY){
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const sx = (clientX - rect.left) * scaleX;
+    const sy = (clientY - rect.top) * scaleY;
+
+    const cx = canvas.width/2, cy = canvas.height/2;
+    const m = new DOMMatrix()
+        .translate(cx,cy)
+        .scale(state.scale, state.scale)
+        .rotate(state.rot)
+        .multiply(new DOMMatrix([1,0,state.skew,1,0,0]))
+        .translate(-cx,-cy);
+    const inv = m.inverse();
+    const p = inv.transformPoint({x:sx, y:sy});
+    return {x:p.x, y:p.y};
+}
+
+// Plain CSS-pixel position relative to #wrap (used only for the crop box,
+// which is an HTML element overlaying the canvas, not canvas content).
+function getWrapCssPos(clientX, clientY){
+    const wrapRect = wrap.getBoundingClientRect();
+    return {x: clientX - wrapRect.left, y: clientY - wrapRect.top};
+}
+
+function pointerXY(e){
+    if(e.touches && e.touches.length) return {x:e.touches[0].clientX, y:e.touches[0].clientY};
+    if(e.changedTouches && e.changedTouches.length) return {x:e.changedTouches[0].clientX, y:e.changedTouches[0].clientY};
+    return {x:e.clientX, y:e.clientY};
+}
+
+function pointerDown(e){
+    e.preventDefault();
+    const {x:clientX, y:clientY} = pointerXY(e);
+    const pos = getContentPos(clientX, clientY);
+
+    if(mode==='draw'){
+        drawing = true;
+        state.drawings.push({color:brush.color, size:brush.size, points:[pos]});
+    }
+    if(mode==='text'){
+        selectText(pos);
+        if(!selectedObj) addText(pos);
+    }
+    if(mode==='crop'){
+        const wp = getWrapCssPos(clientX, clientY);
+        cropStart = wp;
+        cropBox.style.left = wp.x+'px'; cropBox.style.top = wp.y+'px';
+        cropBox.style.width = '0px'; cropBox.style.height = '0px';
+        cropBox.style.display = 'block';
+    }
+}
+function pointerMove(e){
+    if(mode==='draw' && drawing){
+        e.preventDefault();
+        const {x:clientX, y:clientY} = pointerXY(e);
+        state.drawings[state.drawings.length-1].points.push(getContentPos(clientX, clientY));
+        render();
+    }
+    if(mode==='text' && selectedObj && (e.buttons || (e.touches && e.touches.length))){
+        e.preventDefault();
+        const {x:clientX, y:clientY} = pointerXY(e);
+        const pos = getContentPos(clientX, clientY);
+        selectedObj.x = pos.x; selectedObj.y = pos.y; render();
+    }
+    if(mode==='crop' && cropStart){
+        e.preventDefault();
+        const {x:clientX, y:clientY} = pointerXY(e);
+        const wp = getWrapCssPos(clientX, clientY);
+        const left = Math.min(cropStart.x, wp.x);
+        const top = Math.min(cropStart.y, wp.y);
+        const w = Math.abs(wp.x - cropStart.x);
+        const h = Math.abs(wp.y - cropStart.y);
+        cropBox.style.left = left+'px'; cropBox.style.top = top+'px';
+        cropBox.style.width = w+'px'; cropBox.style.height = h+'px';
+    }
+}
+function pointerUp(){
+    if(drawing){drawing=false; pushState();}
+    cropStart = null;
+}
+
+canvas.onmousedown = pointerDown;
+canvas.onmousemove = pointerMove;
+canvas.onmouseup = pointerUp;
+canvas.addEventListener('touchstart', pointerDown, {passive:false});
+canvas.addEventListener('touchmove', pointerMove, {passive:false});
+canvas.addEventListener('touchend', pointerUp, {passive:false});
+canvas.addEventListener('touchcancel', pointerUp, {passive:false});
+
+function selectText(pos){
+    selectedObj = null;
+    // pos is already in content space, and t.x/t.y are stored in content
+    // space too, so we compare directly -- no need to re-apply the canvas
+    // transform here.
+    ctx.save();
+    for(let i=state.texts.length-1;i>=0;i--){
+        let t = state.texts[i];
+        ctx.font=`${t.size}px ${t.font}`;
+        let w = ctx.measureText(t.txt).width;
+        if(pos.x > t.x-10 && pos.x < t.x+w+10 && pos.y > t.y-t.size-5 && pos.y < t.y+5){
+            selectedObj = t; break;
+        }
+    }
+    ctx.restore(); render();
+}
+
+function addText(pos){
+    let txt = prompt("Enter text:");
     if(!txt) return;
-    let font=prompt("Font: Arial, Verdana, Courier", "Arial");
-    let color=prompt("Color: #ffffff", "#ffffff");
-    let x=0, y=-img.height/4; // top center
-    texts.push({txt,x,y,size:40,font:font||'Arial',color:color||'#fff'});
-    redrawDrawLayer();
+    let font = prompt("Font: Arial, Verdana, Courier, Times", "Arial");
+    state.texts.push({
+        txt, x:pos.x, y:pos.y, size:48,
+        font:font||'Arial', color:brush.color,
+        rot:0, skew:0
+    });
+    pushState(); render();
 }
 
-function zoom(f){scale=Math.max(0.5, Math.min(4, scale*f)); drawImage(); redrawDrawLayer();}
-function rotate(d){rot+=d; drawImage(); redrawDrawLayer();}
-function skew(s){sk+=s; drawImage(); redrawDrawLayer();}
-
-function save(){
-    let temp=document.createElement('canvas');
-    temp.width=img.width; temp.height=img.height;
-    let tctx=temp.getContext('2d');
-    tctx.drawImage(imgCanvas,0,0);
-    tctx.drawImage(drawCanvas,0,0);
-    let a=document.createElement('a');
-    a.download="edited.jpg"; a.href=temp.toDataURL('image/jpeg',0.9); a.click();
+// TRANSFORM SELECTED TEXT OR GLOBAL IMAGE
+function transform(type,val){
+    if(selectedObj && mode==='text'){
+        if(type==='rotate') selectedObj.rot += val;
+        if(type==='skew') selectedObj.skew += val;
+    } else {
+        if(type==='rotate') state.rot += val;
+        if(type==='skew') state.skew += val;
+        if(type==='zoom') state.scale = Math.max(0.5,Math.min(3,state.scale*val));
+    }
+    pushState(); render();
 }
+
+// CROP -- BUG FIX #2 & #3: correctly convert the crop box (drawn in CSS
+// pixels over #wrap) into the canvas's actual pixel-buffer coordinates,
+// and account for the fact the canvas is not necessarily flush with #wrap.
+function doCrop(){
+    if(cropBox.style.display==='none') return;
+    const cropRect = cropBox.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    if(cropRect.width < 2 || cropRect.height < 2) return; // nothing meaningfully selected
+
+    const scaleX = canvas.width / canvasRect.width;
+    const scaleY = canvas.height / canvasRect.height;
+
+    let x = (cropRect.left - canvasRect.left) * scaleX;
+    let y = (cropRect.top - canvasRect.top) * scaleY;
+    let w = cropRect.width * scaleX;
+    let h = cropRect.height * scaleY;
+
+    // clamp to canvas bounds
+    x = Math.max(0, x); y = Math.max(0, y);
+    w = Math.min(w, canvas.width - x);
+    h = Math.min(h, canvas.height - y);
+    if(w < 1 || h < 1) return;
+
+    let temp = document.createElement('canvas');
+    temp.width = w; temp.height = h;
+    temp.getContext('2d').drawImage(canvas, x,y,w,h, 0,0,w,h);
+
+    const dataUrl = temp.toDataURL();
+    cropBox.style.display='none';
+    cropStart = null;
+    img.onload = ()=>{
+        canvas.width = w; canvas.height = h;
+        // reset view transform since we've baked everything into the new image
+        state.scale=1; state.rot=0; state.skew=0; state.filters={}; state.drawings=[]; state.texts=[];
+        pushState(); render();
+    };
+    img.src = dataUrl;
+}
+
+function setFilter(type){
+    let val = prompt(`${type} value:`, type==='blur'?'5px':'150%');
+    if(val) {state.filters[type]=val; pushState(); render();}
+}
+
+function resetAll(){state={scale:1,rot:0,skew:0,filters:{},drawings:[],texts:[]}; pushState(); render();}
+
+function pushState(){
+    history = history.slice(0,step+1);
+    history.push(JSON.stringify(state));
+    step++;
+}
+function undo(){if(step>0){step--; state=JSON.parse(history[step]); render();}}
+function redo(){if(step<history.length-1){step++; state=JSON.parse(history[step]); render();}}
+
+function saveImage(){
+    let a=document.createElement('a'); a.download="pro-edit-v2.jpg"; a.href=canvas.toDataURL('image/jpeg',0.9); a.click();
+}
+
+// Double click / double-tap on crop button to apply crop
+document.getElementById('btnCrop').ondblclick = doCrop;
+let lastCropTap = 0;
+document.getElementById('btnCrop').addEventListener('touchend', ()=>{
+    const now = Date.now();
+    if(now - lastCropTap < 350) doCrop();
+    lastCropTap = now;
+});
 </script>
 </body>
 </html>

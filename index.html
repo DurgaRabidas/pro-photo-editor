@@ -8,7 +8,8 @@
     body {background:#121212; color:#eee; margin:0; font-family:system-ui; display:flex; flex-direction:column; height:100vh}
     h3 {text-align:center; margin:10px 0}
     #wrap {flex:1; position:relative; background:#000; display:flex; justify-content:center; align-items:center; overflow:hidden}
-    canvas {position:absolute; max-width:100%; max-height:100%; touch-action:none}
+    canvas {position:absolute; max-width:100%; max-height:100%; touch-action:none; display:none}
+    canvas.ready {display:block}
     #toolbar {background:#1f1f1f; padding:8px; display:flex; gap:8px; overflow-x:auto; border-top:1px solid #333}
     #subtools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:10px}
     #subtools.active {display:flex}
@@ -21,12 +22,28 @@
   .color-dot {width:28px; height:28px; border-radius:50%; border:2px solid #555; cursor:pointer}
   .color-dot.active {border:2px solid #fff}
     #upload-label {padding:15px 30px; background:#4CAF50; border-radius:10px; cursor:pointer}
-    #upload {display:none}
+    #upload {position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0}
   .crop-box {position:absolute; border:2px dashed #fff; background:rgba(0,0,0,0.3); display:none}
     #cropHint {position:absolute; bottom:8px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); padding:6px 12px; border-radius:6px; font-size:12px; display:none; white-space:nowrap}
+    #filterTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px}
+    #filterTools.active {display:flex}
+    .filter-row {display:grid; grid-template-columns:90px 1fr 44px; align-items:center; gap:8px}
+    .filter-row input[type=range] {background:transparent; padding:0; accent-color:#4CAF50}
+    .filter-row span {text-align:right; font-size:12px; color:#aaa}
+    #moveHint {position:absolute; bottom:8px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); padding:6px 12px; border-radius:6px; font-size:12px; display:none; white-space:nowrap}
+    #aiTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px}
+    #aiTools.active {display:flex}
+    #aiStatus {font-size:13px; color:#eee; min-height:16px; background:#1a1a1a; padding:8px; border-radius:6px}
+    button:disabled {opacity:0.5; cursor:not-allowed}
 </style>
 </head>
 <body>
+<svg style="position:absolute; width:0; height:0" aria-hidden="true">
+  <filter id="wbFilter" color-interpolation-filters="sRGB">
+    <feColorMatrix id="wbMatrix" type="matrix"
+      values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0"/>
+  </filter>
+</svg>
 <h3>📷 Pro Photo Editor v2</h3>
 
 <div id="wrap">
@@ -35,10 +52,11 @@
     <canvas id="mainCanvas"></canvas>
     <div id="cropBox" class="crop-box"></div>
     <div id="cropHint">Drag to draw a crop box, then double-tap the ✂️ Crop button to apply</div>
+    <div id="moveHint">Drag anywhere on the image to pan it</div>
 </div>
 
 <div id="subtools">
-    <div class="row">
+    <div class="row" id="sizeRow">
         <label>Size: <input type="range" id="brushSize" min="1" max="80" value="5"></label>
         <span id="sizeVal">5px</span>
     </div>
@@ -46,9 +64,68 @@
         <label>Color: <input type="color" id="brushColor" value="#ff0000"></label>
         <div id="colorPresets"></div>
     </div>
+</div>
+
+<div id="filterTools">
+    <div class="filter-row">
+        <label for="fBrightness">Brightness</label>
+        <input type="range" id="fBrightness" min="0" max="200" value="100">
+        <span id="fBrightnessVal">100%</span>
+    </div>
+    <div class="filter-row">
+        <label for="fContrast">Contrast</label>
+        <input type="range" id="fContrast" min="0" max="200" value="100">
+        <span id="fContrastVal">100%</span>
+    </div>
+    <div class="filter-row">
+        <label for="fSaturate">Saturation</label>
+        <input type="range" id="fSaturate" min="0" max="200" value="100">
+        <span id="fSaturateVal">100%</span>
+    </div>
+    <div class="filter-row">
+        <label for="fWbR">Red balance</label>
+        <input type="range" id="fWbR" min="50" max="150" value="100">
+        <span id="fWbRVal">100%</span>
+    </div>
+    <div class="filter-row">
+        <label for="fWbG">Green balance</label>
+        <input type="range" id="fWbG" min="50" max="150" value="100">
+        <span id="fWbGVal">100%</span>
+    </div>
+    <div class="filter-row">
+        <label for="fWbB">Blue balance</label>
+        <input type="range" id="fWbB" min="50" max="150" value="100">
+        <span id="fWbBVal">100%</span>
+    </div>
+    <div class="filter-row">
+        <label for="fSepia">Sepia</label>
+        <input type="range" id="fSepia" min="0" max="100" value="0">
+        <span id="fSepiaVal">0%</span>
+    </div>
+    <div class="filter-row">
+        <label for="fGrayscale">Black &amp; White</label>
+        <input type="range" id="fGrayscale" min="0" max="100" value="0">
+        <span id="fGrayscaleVal">0%</span>
+    </div>
+    <div class="filter-row">
+        <label for="fBlur">Blur</label>
+        <input type="range" id="fBlur" min="0" max="20" value="0">
+        <span id="fBlurVal">0px</span>
+    </div>
     <div class="row">
-        <button onclick="undo()">↩️ Undo</button>
-        <button onclick="redo()">↪️ Redo</button>
+        <button onclick="resetFilters()">↺ Reset filters</button>
+    </div>
+</div>
+
+<div id="aiTools">
+    <div class="row">
+        <button id="btnAnalyze" onclick="runAIEnhance()">✨ Auto-Enhance (on-device)</button>
+    </div>
+    <div id="aiStatus"></div>
+    <div class="filter-row">
+        <label for="aiIntensity">Intensity</label>
+        <input type="range" id="aiIntensity" min="0" max="100" value="0" disabled>
+        <span id="aiIntensityVal">0%</span>
     </div>
 </div>
 
@@ -57,6 +134,10 @@
     <button id="btnDraw" onclick="setMode('draw')">🖊️ Draw</button>
     <button id="btnText" onclick="setMode('text')">T Text</button>
     <button id="btnCrop" onclick="setMode('crop')">✂️ Crop</button>
+    <button id="btnFilter" onclick="setMode('filter')">🎨 Filters</button>
+    <button id="btnAi" onclick="setMode('ai')">✨ AI Enhance</button>
+    <button onclick="undo()">↩️ Undo</button>
+    <button onclick="redo()">↪️ Redo</button>
     <button onclick="transform('rotate',-5)">↪️ Rot L</button>
     <button onclick="transform('rotate',5)">↩️ Rot R</button>
     <button onclick="transform('skew',-0.1)">↗️ Skew L</button>
@@ -81,26 +162,218 @@ let selectedObj = null; // for text selection
 let history = []; let step = -1;
 let cropStart = null; // {x,y} in wrap-relative CSS px
 
+const DEFAULT_FILTERS = {brightness:100, contrast:100, saturate:100, sepia:0, grayscale:0, blur:0, wbR:100, wbG:100, wbB:100};
+
 let state = {
-    scale:1, rot:0, skew:0,
-    filters:{},
+    scale:1, rot:0, skew:0, panX:0, panY:0,
+    filters: {...DEFAULT_FILTERS},
     drawings: [], // {color, size, points:[]}  -- points are in CONTENT space (pre-transform)
     texts: [] // {txt,x,y,size,font,color,rot,skew} -- x,y are in CONTENT space
 };
 let brush = {color:'#ff0000', size:5};
+let panStart = null; // {clientX, clientY, panX0, panY0}
+
+const wbMatrixEl = document.getElementById('wbMatrix');
+function updateWbMatrix(f){
+    const r = f.wbR/100, g = f.wbG/100, b = f.wbB/100;
+    wbMatrixEl.setAttribute('values', `${r} 0 0 0 0  0 ${g} 0 0 0  0 0 ${b} 0 0  0 0 0 1 0`);
+}
+
+function filterCssString(f){
+    // url(#wbFilter) corrects color cast (per-channel gain) first; the rest
+    // then apply on top, same as a real editing pipeline (white balance -> tone -> color).
+    return `url(#wbFilter) brightness(${f.brightness}%) contrast(${f.contrast}%) saturate(${f.saturate}%) `
+         + `sepia(${f.sepia}%) grayscale(${f.grayscale}%) blur(${f.blur}px)`;
+}
+
+function wireFilterSlider(id, key, suffix){
+    const el = document.getElementById(id);
+    const val = document.getElementById(id+'Val');
+    el.oninput = () => {
+        state.filters[key] = Number(el.value);
+        val.textContent = el.value + suffix;
+        render();
+    };
+    el.onchange = () => pushState(); // only snapshot history once the drag ends
+}
+wireFilterSlider('fBrightness','brightness','%');
+wireFilterSlider('fContrast','contrast','%');
+wireFilterSlider('fSaturate','saturate','%');
+wireFilterSlider('fSepia','sepia','%');
+wireFilterSlider('fGrayscale','grayscale','%');
+wireFilterSlider('fBlur','blur','px');
+wireFilterSlider('fWbR','wbR','%');
+wireFilterSlider('fWbG','wbG','%');
+wireFilterSlider('fWbB','wbB','%');
+
+const FILTER_SLIDER_MAP = {
+    brightness:['fBrightness','%'], contrast:['fContrast','%'], saturate:['fSaturate','%'],
+    sepia:['fSepia','%'], grayscale:['fGrayscale','%'], blur:['fBlur','px'],
+    wbR:['fWbR','%'], wbG:['fWbG','%'], wbB:['fWbB','%']
+};
+function syncFilterSliders(){
+    for(const [key, [id, suffix]] of Object.entries(FILTER_SLIDER_MAP)){
+        document.getElementById(id).value = state.filters[key];
+        document.getElementById(id+'Val').textContent = state.filters[key] + suffix;
+    }
+}
+
+function resetFilters(){
+    state.filters = {...DEFAULT_FILTERS};
+    syncFilterSliders();
+    pushState(); render();
+}
+
+// ---- On-device "smart enhance": analyzes the photo's actual pixels
+// (luminance histogram + average saturation) and computes contrast /
+// brightness / saturation values that correct it. Pure client-side JS,
+// no network calls, no API. Classic histogram/color-statistics analysis
+// (the same family of technique behind most "auto enhance" camera
+// buttons) -- not a neural network, but it's a real per-photo computation,
+// not a fixed preset.
+let aiBaseline = null;
+let aiTarget = null;
+const aiStatus = document.getElementById('aiStatus');
+const aiIntensity = document.getElementById('aiIntensity');
+const aiIntensityVal = document.getElementById('aiIntensityVal');
+const btnAnalyze = document.getElementById('btnAnalyze');
+
+function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
+
+function computeAutoEnhance(){
+    // Analyze at reduced resolution -- plenty for histogram/color stats, keeps it instant.
+    if(!img.naturalWidth || !img.naturalHeight){
+        throw new Error('image not fully decoded yet — try again in a moment');
+    }
+    const SAMPLE = 150;
+    const scale = SAMPLE / Math.max(img.naturalWidth, img.naturalHeight);
+    const off = document.createElement('canvas');
+    off.width = Math.max(1, Math.round(img.naturalWidth*scale));
+    off.height = Math.max(1, Math.round(img.naturalHeight*scale));
+    const octx = off.getContext('2d');
+    octx.drawImage(img, 0, 0, off.width, off.height);
+    const data = octx.getImageData(0, 0, off.width, off.height).data;
+
+    const lumaHist = new Array(256).fill(0);
+    let lumaSum = 0, satSum = 0, rSum = 0, gSum = 0, bSum = 0;
+    const totalPixels = data.length / 4;
+
+    for(let i=0; i<data.length; i+=4){
+        const r=data[i], g=data[i+1], b=data[i+2];
+        const luma = 0.299*r + 0.587*g + 0.114*b;
+        lumaHist[Math.min(255, Math.round(luma))]++;
+        lumaSum += luma;
+        rSum += r; gSum += g; bSum += b;
+
+        const max = Math.max(r,g,b), min = Math.min(r,g,b);
+        const l = (max+min)/2;
+        const s = (max===min) ? 0 : (l > 127.5 ? (max-min)/(510-max-min) : (max-min)/(max+min));
+        satSum += s;
+    }
+
+    const meanLuma = lumaSum / totalPixels;
+    const meanSatPct = (satSum / totalPixels) * 100;
+    const rMean = rSum/totalPixels, gMean = gSum/totalPixels, bMean = bSum/totalPixels;
+
+    function percentile(p){
+        const target = p * totalPixels;
+        let cum = 0;
+        for(let v=0; v<256; v++){ cum += lumaHist[v]; if(cum >= target) return v; }
+        return 255;
+    }
+    const lowP = percentile(0.01), highP = percentile(0.99);
+    const currentRange = Math.max(highP - lowP, 1);
+
+    const contrastPct   = clamp(Math.round(100 * 235/currentRange), 85, 160);
+    const brightnessPct = clamp(Math.round(100 * 128/Math.max(meanLuma,20)), 80, 130);
+    const saturatePct   = clamp(Math.round(100 * 42/Math.max(meanSatPct,8)), 95, 155);
+
+    // Gray-world white balance: assume the scene averages out to neutral gray,
+    // so nudge each channel's mean toward the overall average. This is what
+    // actually fixes a warm/cool/green color cast -- brightness/contrast/
+    // saturation alone can't touch that.
+    const grayTarget = (rMean + gMean + bMean) / 3;
+    const wbRPct = clamp(Math.round(100 * grayTarget/Math.max(rMean,10)), 70, 140);
+    const wbGPct = clamp(Math.round(100 * grayTarget/Math.max(gMean,10)), 70, 140);
+    const wbBPct = clamp(Math.round(100 * grayTarget/Math.max(bMean,10)), 70, 140);
+    const castDesc = wbRPct>106 ? 'warm cast corrected' : wbBPct>106 ? 'cool cast corrected'
+                    : wbGPct>106 ? 'green cast corrected' : 'color balance already neutral';
+
+    return {
+        brightness: brightnessPct, contrast: contrastPct, saturate: saturatePct,
+        sepia: 0, grayscale: 0, blur: 0,
+        wbR: wbRPct, wbG: wbGPct, wbB: wbBPct,
+        note: `Tonal range ${lowP}-${highP}/255, avg saturation ${meanSatPct.toFixed(0)}%, ${castDesc} → `
+            + `contrast ${contrastPct}%, brightness ${brightnessPct}%, saturation ${saturatePct}%`
+    };
+}
+
+function runAIEnhance(){
+    if(!canvas.classList.contains('ready')){
+        aiStatus.textContent = '⚠️ No photo loaded yet — tap "Choose Image" first.';
+        return;
+    }
+    aiStatus.textContent = 'Analyzing pixels…';
+    btnAnalyze.disabled = true;
+    // brief defer so the status text paints before the (fast) synchronous work
+    setTimeout(() => {
+        try{
+            const suggestion = computeAutoEnhance();
+            aiBaseline = {...state.filters};
+            aiTarget = {};
+            for(const k of Object.keys(DEFAULT_FILTERS)){
+                aiTarget[k] = (suggestion[k] !== undefined) ? suggestion[k] : DEFAULT_FILTERS[k];
+            }
+            aiStatus.textContent = suggestion.note;
+            aiIntensity.disabled = false;
+            aiIntensity.value = 0;
+            aiIntensityVal.textContent = '0%';
+        } catch(err){
+            aiStatus.textContent = '⚠️ Auto-enhance failed: ' + err.message;
+            console.error('Auto-enhance error:', err);
+        } finally {
+            btnAnalyze.disabled = false;
+        }
+    }, 20);
+}
+
+aiIntensity.oninput = () => {
+    if(!aiBaseline || !aiTarget) return;
+    const pct = Number(aiIntensity.value) / 100;
+    aiIntensityVal.textContent = aiIntensity.value + '%';
+    for(const k of Object.keys(DEFAULT_FILTERS)){
+        state.filters[k] = Math.round(aiBaseline[k] + (aiTarget[k] - aiBaseline[k]) * pct);
+    }
+    render();
+};
+aiIntensity.onchange = () => pushState();
 
 // COLOR PRESETS
 const presets = ['#ff0000','#00ff00','#0000ff','#ffff00','#ff00ff','#00ffff','#000','#ffffff','#ff9800','#9c27b0'];
 const presetDiv = document.getElementById('colorPresets');
+
+function applyBrushColor(c){
+    brush.color = c;
+    document.getElementById('brushColor').value = c;
+    updateActivePreset(c);
+    // If a text object is currently selected, recolor it live too --
+    // that's what makes the color panel actually useful in Text mode.
+    if(mode==='text' && selectedObj){
+        selectedObj.color = c;
+        render();
+        pushState();
+    }
+}
+
 presets.forEach(c=>{
     let d=document.createElement('div'); d.className='color-dot'; d.style.background=c;
-    d.onclick=()=>{brush.color=c; document.getElementById('brushColor').value=c; updateActivePreset(c)}
+    d.onclick=()=>applyBrushColor(c);
     presetDiv.appendChild(d);
 })
 function updateActivePreset(c){ document.querySelectorAll('.color-dot').forEach(d=>d.classList.toggle('active', d.style.background===c)) }
 updateActivePreset('#ff0000');
 
-document.getElementById('brushColor').oninput = e => {brush.color = e.target.value; updateActivePreset(e.target.value)}
+document.getElementById('brushColor').oninput = e => applyBrushColor(e.target.value);
 document.getElementById('brushSize').oninput = e => {brush.size = e.target.value; document.getElementById('sizeVal').innerText=e.target.value+'px'}
 
 document.getElementById('upload').onchange = e => {
@@ -108,8 +381,19 @@ document.getElementById('upload').onchange = e => {
     img.src = URL.createObjectURL(file);
     document.getElementById('upload-label').style.display = 'none';
 }
+let pendingCropSize = null; // {w,h} set just before assigning a cropped data URL as the new img.src
 img.onload = () => {
-    canvas.width = img.width; canvas.height = img.height;
+    if(pendingCropSize){
+        canvas.width = pendingCropSize.w; canvas.height = pendingCropSize.h;
+        // reset view transform since we've baked everything into the new image
+        state.scale=1; state.rot=0; state.skew=0; state.panX=0; state.panY=0;
+        state.filters={...DEFAULT_FILTERS}; state.drawings=[]; state.texts=[];
+        syncFilterSliders();
+        pendingCropSize = null;
+    } else {
+        canvas.width = img.width; canvas.height = img.height;
+    }
+    canvas.classList.add('ready');
     pushState(); render();
 }
 
@@ -117,10 +401,16 @@ function setMode(m){
     mode = m;
     document.querySelectorAll('#toolbar button').forEach(b=>b.classList.remove('active'));
     document.getElementById('btn'+m.charAt(0).toUpperCase()+m.slice(1)).classList.add('active');
-    document.getElementById('subtools').classList.toggle('active', m==='draw');
+    document.getElementById('subtools').classList.toggle('active', m==='draw' || m==='text');
+    document.getElementById('sizeRow').style.display = m==='draw' ? 'flex' : 'none';
+    document.getElementById('filterTools').classList.toggle('active', m==='filter');
+    document.getElementById('aiTools').classList.toggle('active', m==='ai');
+    if(m==='filter') syncFilterSliders();
     cropBox.style.display = 'none';
     cropHint.style.display = m==='crop' ? 'block' : 'none';
+    document.getElementById('moveHint').style.display = m==='move' ? 'block' : 'none';
     cropStart = null;
+    panStart = null;
 }
 
 function render(){
@@ -129,7 +419,8 @@ function render(){
     applyTransforms(ctx);
 
     // 1. Draw Image with filters
-    ctx.filter = Object.entries(state.filters).map(([k,v])=>`${k}(${v})`).join(' ') || 'none';
+    updateWbMatrix(state.filters);
+    ctx.filter = filterCssString(state.filters);
     ctx.drawImage(img,0,0);
     ctx.filter = 'none';
 
@@ -160,7 +451,7 @@ function render(){
 }
 
 function applyTransforms(ctx){
-    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.translate(canvas.width/2 + state.panX, canvas.height/2 + state.panY);
     ctx.scale(state.scale, state.scale);
     ctx.rotate(state.rot * Math.PI/180);
     ctx.transform(1,0,state.skew,1,0,0);
@@ -182,7 +473,7 @@ function getContentPos(clientX, clientY){
 
     const cx = canvas.width/2, cy = canvas.height/2;
     const m = new DOMMatrix()
-        .translate(cx,cy)
+        .translate(cx + state.panX, cy + state.panY)
         .scale(state.scale, state.scale)
         .rotate(state.rot)
         .multiply(new DOMMatrix([1,0,state.skew,1,0,0]))
@@ -225,6 +516,9 @@ function pointerDown(e){
         cropBox.style.width = '0px'; cropBox.style.height = '0px';
         cropBox.style.display = 'block';
     }
+    if(mode==='move'){
+        panStart = {clientX, clientY, panX0: state.panX, panY0: state.panY};
+    }
 }
 function pointerMove(e){
     if(mode==='draw' && drawing){
@@ -250,9 +544,20 @@ function pointerMove(e){
         cropBox.style.left = left+'px'; cropBox.style.top = top+'px';
         cropBox.style.width = w+'px'; cropBox.style.height = h+'px';
     }
+    if(mode==='move' && panStart){
+        e.preventDefault();
+        const {x:clientX, y:clientY} = pointerXY(e);
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        state.panX = panStart.panX0 + (clientX - panStart.clientX) * scaleX;
+        state.panY = panStart.panY0 + (clientY - panStart.clientY) * scaleY;
+        render();
+    }
 }
 function pointerUp(){
     if(drawing){drawing=false; pushState();}
+    if(panStart){panStart=null; pushState();}
     cropStart = null;
 }
 
@@ -336,29 +641,23 @@ function doCrop(){
     const dataUrl = temp.toDataURL();
     cropBox.style.display='none';
     cropStart = null;
-    img.onload = ()=>{
-        canvas.width = w; canvas.height = h;
-        // reset view transform since we've baked everything into the new image
-        state.scale=1; state.rot=0; state.skew=0; state.filters={}; state.drawings=[]; state.texts=[];
-        pushState(); render();
-    };
+    pendingCropSize = {w, h};
     img.src = dataUrl;
 }
 
-function setFilter(type){
-    let val = prompt(`${type} value:`, type==='blur'?'5px':'150%');
-    if(val) {state.filters[type]=val; pushState(); render();}
+function resetAll(){
+    state = {scale:1,rot:0,skew:0,panX:0,panY:0,filters:{...DEFAULT_FILTERS},drawings:[],texts:[]};
+    syncFilterSliders();
+    pushState(); render();
 }
-
-function resetAll(){state={scale:1,rot:0,skew:0,filters:{},drawings:[],texts:[]}; pushState(); render();}
 
 function pushState(){
     history = history.slice(0,step+1);
     history.push(JSON.stringify(state));
     step++;
 }
-function undo(){if(step>0){step--; state=JSON.parse(history[step]); render();}}
-function redo(){if(step<history.length-1){step++; state=JSON.parse(history[step]); render();}}
+function undo(){if(step>0){step--; state=JSON.parse(history[step]); syncFilterSliders(); render();}}
+function redo(){if(step<history.length-1){step++; state=JSON.parse(history[step]); syncFilterSliders(); render();}}
 
 function saveImage(){
     let a=document.createElement('a'); a.download="pro-edit-v2.jpg"; a.href=canvas.toDataURL('image/jpeg',0.9); a.click();

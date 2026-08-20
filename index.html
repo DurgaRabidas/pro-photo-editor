@@ -17,6 +17,7 @@
     button, input, select {padding:8px 12px; background:#4CAF50; color:#fff; border:none; border-radius:8px; font-size:14px; cursor:pointer}
     button.active {background:#ff9800}
     button.danger {background:#f44336}
+    .brush-style-btn {font-size:13px; padding:6px 10px}
     input[type=color] {width:40px; height:35px; padding:2px}
     #colorPresets {display:flex; gap:6px; flex-wrap:wrap}
   .color-dot {width:28px; height:28px; border-radius:50%; border:2px solid #555; cursor:pointer}
@@ -56,8 +57,16 @@
 </div>
 
 <div id="subtools">
+    <div class="row" id="brushStyleRow">
+        <label>Brush:</label>
+        <button class="brush-style-btn active" data-style="marker">🖊️ Marker</button>
+        <button class="brush-style-btn" data-style="pencil">✏️ Pencil</button>
+        <button class="brush-style-btn" data-style="highlighter">🖍️ Highlighter</button>
+        <button class="brush-style-btn" data-style="spray">💨 Spray</button>
+        <button class="brush-style-btn" data-style="calligraphy">🖋️ Calligraphy</button>
+    </div>
     <div class="row" id="sizeRow">
-        <label>Size: <input type="range" id="brushSize" min="1" max="80" value="5"></label>
+        <label>Thickness: <input type="range" id="brushSize" min="1" max="80" value="5"></label>
         <span id="sizeVal">5px</span>
     </div>
     <div class="row">
@@ -170,7 +179,28 @@ let state = {
     drawings: [], // {color, size, points:[]}  -- points are in CONTENT space (pre-transform)
     texts: [] // {txt,x,y,size,font,color,rot,skew} -- x,y are in CONTENT space
 };
-let brush = {color:'#ff0000', size:5};
+let brush = {color:'#ff0000', size:5, style:'marker'};
+
+document.querySelectorAll('.brush-style-btn').forEach(btn=>{
+    btn.onclick = () => {
+        brush.style = btn.dataset.style;
+        document.querySelectorAll('.brush-style-btn').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+    };
+});
+
+// Generates jittered dab positions for the spray/airbrush style. Computed
+// once when the point is added (not at render time) so the spray pattern
+// stays fixed instead of re-randomizing on every re-render.
+function sprayDabs(center, radius){
+    const dabs = [];
+    for(let i=0; i<8; i++){
+        const angle = Math.random()*Math.PI*2;
+        const r = Math.random()*radius;
+        dabs.push({x: center.x + Math.cos(angle)*r, y: center.y + Math.sin(angle)*r});
+    }
+    return dabs;
+}
 let panStart = null; // {clientX, clientY, panX0, panY0}
 
 const wbMatrixEl = document.getElementById('wbMatrix');
@@ -403,6 +433,7 @@ function setMode(m){
     document.getElementById('btn'+m.charAt(0).toUpperCase()+m.slice(1)).classList.add('active');
     document.getElementById('subtools').classList.toggle('active', m==='draw' || m==='text');
     document.getElementById('sizeRow').style.display = m==='draw' ? 'flex' : 'none';
+    document.getElementById('brushStyleRow').style.display = m==='draw' ? 'flex' : 'none';
     document.getElementById('filterTools').classList.toggle('active', m==='filter');
     document.getElementById('aiTools').classList.toggle('active', m==='ai');
     if(m==='filter') syncFilterSliders();
@@ -424,10 +455,39 @@ function render(){
     ctx.drawImage(img,0,0);
     ctx.filter = 'none';
 
-    // 2. Draw all paths
+    // 2. Draw all paths, rendered per brush style
     state.drawings.forEach(d=>{
-        ctx.strokeStyle=d.color; ctx.lineWidth=d.size; ctx.lineCap='round'; ctx.lineJoin='round';
-        ctx.beginPath(); d.points.forEach((p,i)=> i===0? ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)); ctx.stroke();
+        ctx.save();
+        const style = d.style || 'marker';
+        if(style === 'highlighter'){
+            ctx.globalAlpha = 0.35;
+            ctx.strokeStyle = d.color; ctx.lineWidth = d.size*2; ctx.lineCap='square'; ctx.lineJoin='round';
+            ctx.beginPath(); d.points.forEach((p,i)=> i===0? ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)); ctx.stroke();
+        } else if(style === 'pencil'){
+            ctx.globalAlpha = 0.85;
+            ctx.strokeStyle = d.color; ctx.lineWidth = Math.max(0.5, d.size*0.35); ctx.lineCap='round'; ctx.lineJoin='round';
+            ctx.beginPath(); d.points.forEach((p,i)=> i===0? ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)); ctx.stroke();
+        } else if(style === 'spray'){
+            ctx.globalAlpha = 0.55;
+            ctx.fillStyle = d.color;
+            d.points.forEach(p=>{
+                ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0.8, d.size*0.08), 0, Math.PI*2); ctx.fill();
+            });
+        } else if(style === 'calligraphy'){
+            ctx.strokeStyle = d.color; ctx.lineCap = 'round';
+            for(let i=1; i<d.points.length; i++){
+                const p0 = d.points[i-1], p1 = d.points[i];
+                const angle = Math.atan2(p1.y-p0.y, p1.x-p0.x);
+                // width varies with stroke direction relative to a fixed 45° nib, like a chisel-tip pen
+                const width = Math.max(1, d.size * (0.25 + 0.75*Math.abs(Math.cos(angle - Math.PI/4))));
+                ctx.lineWidth = width;
+                ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.stroke();
+            }
+        } else { // marker (default / original behavior)
+            ctx.strokeStyle=d.color; ctx.lineWidth=d.size; ctx.lineCap='round'; ctx.lineJoin='round';
+            ctx.beginPath(); d.points.forEach((p,i)=> i===0? ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)); ctx.stroke();
+        }
+        ctx.restore();
     });
 
     // 3. Draw all texts with individual rotate/skew
@@ -503,7 +563,10 @@ function pointerDown(e){
 
     if(mode==='draw'){
         drawing = true;
-        state.drawings.push({color:brush.color, size:brush.size, points:[pos]});
+        state.drawings.push({
+            color:brush.color, size:brush.size, style:brush.style,
+            points: brush.style==='spray' ? sprayDabs(pos, brush.size) : [pos]
+        });
     }
     if(mode==='text'){
         selectText(pos);
@@ -524,7 +587,10 @@ function pointerMove(e){
     if(mode==='draw' && drawing){
         e.preventDefault();
         const {x:clientX, y:clientY} = pointerXY(e);
-        state.drawings[state.drawings.length-1].points.push(getContentPos(clientX, clientY));
+        const pos = getContentPos(clientX, clientY);
+        const stroke = state.drawings[state.drawings.length-1];
+        if(stroke.style==='spray') stroke.points.push(...sprayDabs(pos, stroke.size));
+        else stroke.points.push(pos);
         render();
     }
     if(mode==='text' && selectedObj && (e.buttons || (e.touches && e.touches.length))){

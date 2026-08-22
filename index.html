@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pro Photo Editor</title>
+<title>Pro Photo Editor v2</title>
 <style>
     body {background:#121212; color:#eee; margin:0; font-family:system-ui; display:flex; flex-direction:column; height:100vh}
     h3 {text-align:center; margin:10px 0}
@@ -13,7 +13,8 @@
     #toolbar {background:#1f1f1f; padding:8px; display:flex; gap:8px; overflow-x:auto; border-top:1px solid #333}
     #subtools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:10px}
     #subtools.active {display:flex}
-  .row {display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+  .row {display:flex; gap:10px; align-items:center; flex-wrap:wrap; position:relative}
+    .visually-hidden-file {position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0}
     button, input, select {padding:8px 12px; background:#4CAF50; color:#fff; border:none; border-radius:8px; font-size:14px; cursor:pointer}
     button.active {background:#ff9800}
     button.danger {background:#f44336}
@@ -23,6 +24,7 @@
   .color-dot {width:28px; height:28px; border-radius:50%; border:2px solid #555; cursor:pointer}
   .color-dot.active {border:2px solid #fff}
     #upload-label {padding:15px 30px; background:#4CAF50; border-radius:10px; cursor:pointer}
+    #uploadStatus {display:none; position:absolute; bottom:8px; left:50%; transform:translateX(-50%); max-width:90%; background:rgba(0,0,0,0.85); color:#ffcc80; padding:10px 14px; border-radius:8px; font-size:13px; line-height:1.4; text-align:center}
     #upload {position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0}
   .crop-box {position:absolute; border:2px dashed #fff; background:rgba(0,0,0,0.3); display:none}
     #cropHint {position:absolute; bottom:8px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); padding:6px 12px; border-radius:6px; font-size:12px; display:none; white-space:nowrap}
@@ -35,6 +37,23 @@
     #aiTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px}
     #aiTools.active {display:flex}
     #aiStatus {font-size:13px; color:#eee; min-height:16px; background:#1a1a1a; padding:8px; border-radius:6px}
+    #bgTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px}
+    #bgTools.active {display:flex}
+    #bgWarning {font-size:12px; color:#90caf9; background:#10233a; padding:8px; border-radius:6px; line-height:1.4}
+    #bgStatus {font-size:13px; color:#eee; min-height:16px; background:#1a1a1a; padding:8px; border-radius:6px}
+    #exifTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px}
+    #exifTools.active {display:flex}
+    #exifSaveNote {font-size:12px; color:#90caf9; background:#10233a; padding:8px; border-radius:6px; line-height:1.4}
+    #exifContent {font-size:13px; color:#eee; background:#1a1a1a; padding:8px; border-radius:6px}
+    #exifContent table {width:100%; border-collapse:collapse}
+    #exifContent td {padding:4px 6px; border-bottom:1px solid #333; vertical-align:top}
+    #exifContent td:first-child {color:#aaa; white-space:nowrap; width:40%}
+    #exifGpsWarning {color:#ffcc80; margin-top:6px; font-size:12px}
+    #eraseTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px}
+    #bgApplyRow {display:none; flex-direction:column; gap:8px}
+    #eraseTools.active {display:flex}
+    #eraseStatus {font-size:13px; color:#eee; min-height:16px; background:#1a1a1a; padding:8px; border-radius:6px}
+    #eraseHint {position:absolute; bottom:8px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); padding:6px 12px; border-radius:6px; font-size:12px; display:none; white-space:nowrap}
     button:disabled {opacity:0.5; cursor:not-allowed}
 </style>
 </head>
@@ -45,15 +64,17 @@
       values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0"/>
   </filter>
 </svg>
-<h3>📷 Pro Photo Editor</h3>
+<h3>📷 Pro Photo Editor v2</h3>
 
 <div id="wrap">
     <label for="upload" id="upload-label">📁 Choose Image</label>
     <input type="file" id="upload" accept="image/*">
+    <div id="uploadStatus"></div>
     <canvas id="mainCanvas"></canvas>
     <div id="cropBox" class="crop-box"></div>
     <div id="cropHint">Drag to draw a crop box, then double-tap the ✂️ Crop button to apply</div>
     <div id="moveHint">Drag anywhere on the image to pan it</div>
+    <div id="eraseHint">Brush over the object, lift your finger/mouse to erase it</div>
 </div>
 
 <div id="subtools">
@@ -128,7 +149,7 @@
 
 <div id="aiTools">
     <div class="row">
-        <button id="btnAnalyze" onclick="runAIEnhance()">✨ Auto-Enhance (on-device)</button>
+        <button id="btnAnalyze" onclick="runAIEnhance()">🔄 Re-analyze (after other edits)</button>
     </div>
     <div id="aiStatus"></div>
     <div class="filter-row">
@@ -138,6 +159,54 @@
     </div>
 </div>
 
+<div id="bgTools">
+    <div id="bgWarning">
+        ℹ️ First use needs internet to download a small (~10MB) public segmentation model — a one-time
+        thing, like loading a font. Nothing about your photo is ever uploaded anywhere; the actual
+        processing runs entirely on your device.
+    </div>
+    <div class="row">
+        <button id="btnRemoveBg" onclick="runBackgroundRemove()">✂️ Remove Background</button>
+        <button id="btnBgAltModel" onclick="retryWithOtherModel()" style="display:none">🔁 Try other model</button>
+        <button id="btnBgCancel" onclick="cancelBgPreview()" class="danger" style="display:none">❌ Cancel</button>
+    </div>
+    <div id="bgStatus"></div>
+    <div id="bgApplyRow" style="display:none">
+        <div class="filter-row">
+            <label for="bgFeather">Edge softness</label>
+            <input type="range" id="bgFeather" min="0" max="15" value="3">
+            <span id="bgFeatherVal">3px</span>
+        </div>
+        <div class="row">
+            <label>Fill color: <input type="color" id="bgColor" value="#ffffff"></label>
+            <button onclick="applyBgColor()">Apply color</button>
+        </div>
+        <div class="row">
+            <label for="bgImageFile" id="bgImageLabel" style="padding:8px 12px; background:#4CAF50; border-radius:8px; cursor:pointer">🖼️ Use photo from device</label>
+            <input type="file" id="bgImageFile" accept="image/*" class="visually-hidden-file">
+        </div>
+    </div>
+</div>
+
+<div id="eraseTools">
+    <div class="filter-row">
+        <label for="eraseSize">Brush size</label>
+        <input type="range" id="eraseSize" min="10" max="120" value="40">
+        <span id="eraseSizeVal">40px</span>
+    </div>
+    <div id="eraseStatus">Brush over an unwanted object or blemish, then release to remove it. Works best on small-to-medium objects against a fairly simple background.</div>
+</div>
+
+<div id="exifTools">
+    <div id="exifSaveNote">
+        ℹ️ Note: everything you export with the 💾 Save button in this editor is already
+        EXIF-free automatically — the canvas re-encodes the image from scratch and never
+        carries metadata over. This panel is for checking what's in the <em>original</em>
+        file you uploaded, before it gets edited here.
+    </div>
+    <div id="exifContent">No photo loaded yet.</div>
+</div>
+
 <div id="toolbar">
     <button id="btnMove" onclick="setMode('move')" class="active">✋ Move</button>
     <button id="btnDraw" onclick="setMode('draw')">🖊️ Draw</button>
@@ -145,6 +214,9 @@
     <button id="btnCrop" onclick="setMode('crop')">✂️ Crop</button>
     <button id="btnFilter" onclick="setMode('filter')">🎨 Filters</button>
     <button id="btnAi" onclick="setMode('ai')">✨ AI Enhance</button>
+    <button id="btnBg" onclick="setMode('bg')">🪄 Background</button>
+    <button id="btnErase" onclick="setMode('erase')">🧹 Object Eraser</button>
+    <button id="btnExif" onclick="setMode('exif')">🔎 EXIF Info</button>
     <button onclick="undo()">↩️ Undo</button>
     <button onclick="redo()">↪️ Redo</button>
     <button onclick="transform('rotate',-5)">↪️ Rot L</button>
@@ -167,6 +239,9 @@ const cropHint = document.getElementById('cropHint');
 let img = new Image();
 let mode = 'move';
 let drawing = false;
+let erasing = false;
+let eraseStrokePoints = null; // content-space points while dragging the eraser
+let eraseBrushSize = 40;
 let selectedObj = null; // for text selection
 let history = []; let step = -1;
 let cropStart = null; // {x,y} in wrap-relative CSS px
@@ -378,6 +453,7 @@ aiIntensity.oninput = () => {
 };
 aiIntensity.onchange = () => pushState();
 
+
 // COLOR PRESETS
 const presets = ['#ff0000','#00ff00','#0000ff','#ffff00','#ff00ff','#00ffff','#000','#ffffff','#ff9800','#9c27b0'];
 const presetDiv = document.getElementById('colorPresets');
@@ -405,26 +481,100 @@ updateActivePreset('#ff0000');
 
 document.getElementById('brushColor').oninput = e => applyBrushColor(e.target.value);
 document.getElementById('brushSize').oninput = e => {brush.size = e.target.value; document.getElementById('sizeVal').innerText=e.target.value+'px'}
+document.getElementById('eraseSize').oninput = e => {eraseBrushSize = Number(e.target.value); document.getElementById('eraseSizeVal').innerText=e.target.value+'px'}
+
+const uploadStatus = document.getElementById('uploadStatus');
+function showUploadStatus(msg){
+    uploadStatus.textContent = msg;
+    uploadStatus.style.display = msg ? 'block' : 'none';
+}
 
 document.getElementById('upload').onchange = e => {
     let file = e.target.files[0]; if(!file) return;
+    showUploadStatus('');
+    document.getElementById('upload-label').textContent = '⏳ Loading photo…';
+    document.getElementById('upload-label').style.display = 'block';
+
+    const nameLower = (file.name || '').toLowerCase();
+    if(nameLower.endsWith('.heic') || nameLower.endsWith('.heif') || file.type === 'image/heic' || file.type === 'image/heif'){
+        showUploadStatus('⚠️ This looks like a HEIC/HEIF photo (the default format on iPhone). Many browsers, '
+            + 'especially Chrome on Android, cannot open these directly. If it fails to load below, share/export '
+            + 'it as JPEG first (in your Photos app: Share → choose "Automatic" or "Most Compatible"), then pick it here again.');
+    }
     img.src = URL.createObjectURL(file);
-    document.getElementById('upload-label').style.display = 'none';
+    readExifFromFile(file);
 }
-let pendingCropSize = null; // {w,h} set just before assigning a cropped data URL as the new img.src
+
+const MAX_DIM = 4000; // stay safely under mobile-browser canvas size limits (iOS Safari caps around ~4096-16384 depending on version/area)
+let awaitingDownscale = false;
+let pendingLoad = null; // {w,h} set before assigning a baked (crop/bg-remove/erase) result as img.src -- resets edit state to defaults and pushes a new history entry
+let historyRestore = null; // {w,h,stateJSON,pushAfter} set before assigning a history entry's or the original photo's image data as img.src -- restores that exact state instead of defaults
+let originalImgSrc = null, originalW = 0, originalH = 0; // the very first photo you loaded, so Reset can always get all the way back to it
+
 img.onload = () => {
-    if(pendingCropSize){
-        canvas.width = pendingCropSize.w; canvas.height = pendingCropSize.h;
+    // Guard against huge camera photos (common on newer phones) hitting mobile
+    // canvas size/memory limits, where drawImage/getImageData can silently no-op or throw.
+    if(!pendingLoad && !historyRestore && !awaitingDownscale && Math.max(img.naturalWidth, img.naturalHeight) > MAX_DIM){
+        awaitingDownscale = true;
+        const s = MAX_DIM / Math.max(img.naturalWidth, img.naturalHeight);
+        const tmp = document.createElement('canvas');
+        tmp.width = Math.round(img.naturalWidth * s);
+        tmp.height = Math.round(img.naturalHeight * s);
+        tmp.getContext('2d').drawImage(img, 0, 0, tmp.width, tmp.height);
+        img.src = tmp.toDataURL('image/jpeg', 0.92); // re-triggers this handler once, smaller this time
+        return;
+    }
+    awaitingDownscale = false;
+
+    // Restoring an exact prior state -- undo/redo landing on a step where the
+    // image itself differs (post-crop/bg-remove/erase), or Reset jumping back
+    // to the original photo. Unlike the pendingLoad path below, this does NOT
+    // reset to default filters/drawings/texts -- it restores the specific
+    // state that belongs with this image.
+    if(historyRestore){
+        canvas.width = historyRestore.w; canvas.height = historyRestore.h;
+        state = JSON.parse(historyRestore.stateJSON);
+        syncFilterSliders();
+        const pushAfter = historyRestore.pushAfter;
+        historyRestore = null;
+        canvas.classList.add('ready');
+        if(pushAfter) pushState();
+        render();
+        return;
+    }
+
+    if(pendingLoad){
+        canvas.width = pendingLoad.w; canvas.height = pendingLoad.h;
         // reset view transform since we've baked everything into the new image
         state.scale=1; state.rot=0; state.skew=0; state.panX=0; state.panY=0;
         state.filters={...DEFAULT_FILTERS}; state.drawings=[]; state.texts=[];
         syncFilterSliders();
-        pendingCropSize = null;
+        pendingLoad = null;
     } else {
         canvas.width = img.width; canvas.height = img.height;
+        showUploadStatus('');
+        document.getElementById('upload-label').style.display = 'none';
+        // a fresh photo invalidates any bg-removal preview from the previous one
+        bgPreviewActive = false; bgForegroundCanvas = null; bgMaskCanvas = null; bgSourceCanvas = null;
+        document.getElementById('bgApplyRow').style.display = 'none';
+        document.getElementById('btnBgAltModel').style.display = 'none';
+        document.getElementById('btnBgCancel').style.display = 'none';
+        // remember the ORIGINAL uploaded photo (post-downscale if that applied)
+        // so Reset can always get all the way back to it, even after a crop,
+        // background removal, or object erase has replaced the working image.
+        originalImgSrc = img.src; originalW = img.width; originalH = img.height;
     }
     canvas.classList.add('ready');
     pushState(); render();
+}
+img.onerror = () => {
+    awaitingDownscale = false;
+    document.getElementById('upload-label').textContent = '📁 Choose Image';
+    document.getElementById('upload-label').style.display = 'block';
+    if(!uploadStatus.textContent){
+        showUploadStatus('⚠️ That photo could not be opened. It may be in a format this browser can\'t decode '
+            + '(e.g. HEIC/HEIF from iPhone), or the file may be corrupted. Try a JPEG or PNG.');
+    }
 }
 
 function setMode(m){
@@ -436,6 +586,11 @@ function setMode(m){
     document.getElementById('brushStyleRow').style.display = m==='draw' ? 'flex' : 'none';
     document.getElementById('filterTools').classList.toggle('active', m==='filter');
     document.getElementById('aiTools').classList.toggle('active', m==='ai');
+    if(m==='ai') runAIEnhance(); // one tap opens the tool AND runs the analysis -- no second click needed
+    document.getElementById('bgTools').classList.toggle('active', m==='bg');
+    document.getElementById('eraseTools').classList.toggle('active', m==='erase');
+    document.getElementById('eraseHint').style.display = m==='erase' ? 'block' : 'none';
+    document.getElementById('exifTools').classList.toggle('active', m==='exif');
     if(m==='filter') syncFilterSliders();
     cropBox.style.display = 'none';
     cropHint.style.display = m==='crop' ? 'block' : 'none';
@@ -446,6 +601,19 @@ function setMode(m){
 
 function render(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    // While a background-removal preview is active, it takes over the whole
+    // canvas until you Apply or cancel -- this makes it survive switching to
+    // any other tool/slider/undo in the meantime, since literally everything
+    // else in the app redraws by calling this same render(), and previously
+    // the preview was painted directly onto the canvas outside this function,
+    // so the very next render() call (from anything) would erase it.
+    if(bgPreviewActive && bgForegroundCanvas){
+        drawCheckerboard(ctx, canvas.width, canvas.height);
+        ctx.drawImage(bgForegroundCanvas, 0, 0);
+        return;
+    }
+
     ctx.save();
     applyTransforms(ctx);
 
@@ -507,6 +675,23 @@ function render(){
         }
         ctx.restore();
     });
+
+    // 4. Live eraser stroke preview -- purely visual, not committed until pointerUp
+    if(mode==='erase' && erasing && eraseStrokePoints && eraseStrokePoints.length){
+        ctx.save();
+        ctx.globalAlpha = 0.45;
+        ctx.strokeStyle = '#ffffff'; ctx.fillStyle = '#ffffff';
+        ctx.lineWidth = eraseBrushSize; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        if(eraseStrokePoints.length === 1){
+            ctx.beginPath(); ctx.arc(eraseStrokePoints[0].x, eraseStrokePoints[0].y, eraseBrushSize/2, 0, Math.PI*2); ctx.fill();
+        } else {
+            ctx.beginPath();
+            eraseStrokePoints.forEach((p,i)=> i===0? ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
     ctx.restore();
 }
 
@@ -582,6 +767,11 @@ function pointerDown(e){
     if(mode==='move'){
         panStart = {clientX, clientY, panX0: state.panX, panY0: state.panY};
     }
+    if(mode==='erase'){
+        erasing = true;
+        eraseStrokePoints = [pos];
+        render(); // draws the live brush-path overlay for this first point
+    }
 }
 function pointerMove(e){
     if(mode==='draw' && drawing){
@@ -620,10 +810,23 @@ function pointerMove(e){
         state.panY = panStart.panY0 + (clientY - panStart.clientY) * scaleY;
         render();
     }
+    if(mode==='erase' && erasing){
+        e.preventDefault();
+        const {x:clientX, y:clientY} = pointerXY(e);
+        eraseStrokePoints.push(getContentPos(clientX, clientY));
+        render();
+    }
 }
 function pointerUp(){
     if(drawing){drawing=false; pushState();}
     if(panStart){panStart=null; pushState();}
+    if(erasing){
+        erasing = false;
+        const points = eraseStrokePoints;
+        eraseStrokePoints = null;
+        if(points && points.length >= 1) performErase(points, eraseBrushSize);
+        else render();
+    }
     cropStart = null;
 }
 
@@ -677,9 +880,108 @@ function transform(type,val){
     pushState(); render();
 }
 
-// CROP -- BUG FIX #2 & #3: correctly convert the crop box (drawn in CSS
-// pixels over #wrap) into the canvas's actual pixel-buffer coordinates,
-// and account for the fact the canvas is not necessarily flush with #wrap.
+// ---- Object Eraser (on-device harmonic inpainting, no ML model) ----
+// The brushed region is filled by solving for each masked pixel to be the
+// average of its neighbors, iterated many times -- this is literally
+// harmonic inpainting (discrete Laplace's equation with the surrounding
+// real pixels as the boundary condition). It's the same category of
+// technique that predates deep-learning "magic eraser" tools; it works
+// well for small/medium objects, wires, blemishes, and dust spots against
+// a fairly uniform or gently-varying background, and it degrades gracefully
+// (blurs rather than hallucinates) on regions it can't handle well, which
+// is an honest failure mode rather than a misleading one.
+const eraseStatus = document.getElementById('eraseStatus');
+
+function inpaintRegion(imageData, w, h, maskData){
+    const px = imageData.data;
+    const mask = new Uint8Array(w*h);
+    for(let i=0; i<w*h; i++) mask[i] = maskData[i*4] > 127 ? 1 : 0;
+
+    const channels = [new Float32Array(w*h), new Float32Array(w*h), new Float32Array(w*h)];
+    for(let i=0; i<w*h; i++){
+        channels[0][i]=px[i*4]; channels[1][i]=px[i*4+1]; channels[2][i]=px[i*4+2];
+    }
+
+    // Scale iteration count down for bigger regions so this stays responsive.
+    const iterations = Math.max(40, Math.min(140, Math.round(9000000 / (w*h))));
+    for(let it=0; it<iterations; it++){
+        for(let y=1; y<h-1; y++){
+            const rowBase = y*w;
+            for(let x=1; x<w-1; x++){
+                const idx = rowBase + x;
+                if(!mask[idx]) continue;
+                for(let c=0; c<3; c++){
+                    const ch = channels[c];
+                    ch[idx] = (ch[idx-w] + ch[idx+w] + ch[idx-1] + ch[idx+1]) / 4;
+                }
+            }
+        }
+    }
+    for(let i=0; i<w*h; i++){
+        if(mask[i]){ px[i*4]=channels[0][i]; px[i*4+1]=channels[1][i]; px[i*4+2]=channels[2][i]; }
+    }
+}
+
+function performErase(points, brushSize){
+    if(!canvas.classList.contains('ready')) return;
+    eraseStatus.textContent = 'Erasing…';
+    // defer so the status text paints before the (synchronous, can take a moment on big brushes) work
+    setTimeout(() => {
+        try{
+            const pad = Math.ceil(brushSize); // extra context around the brush for the diffusion to pull from
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            points.forEach(p => {
+                minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+                maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
+            });
+            const bx = Math.max(0, Math.floor(minX - brushSize/2 - pad));
+            const by = Math.max(0, Math.floor(minY - brushSize/2 - pad));
+            const bw = Math.min(canvas.width, Math.ceil(maxX + brushSize/2 + pad)) - bx;
+            const bh = Math.min(canvas.height, Math.ceil(maxY + brushSize/2 + pad)) - by;
+            if(bw < 2 || bh < 2){ eraseStatus.textContent = 'Brush stroke too small — try again.'; return; }
+
+            // rasterize the mask at full-canvas size, in the same content-space
+            // coordinates as the points, so it lines up with the source pixels
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = canvas.width; maskCanvas.height = canvas.height;
+            const mctx = maskCanvas.getContext('2d');
+            mctx.fillStyle = '#000'; mctx.fillRect(0,0,canvas.width,canvas.height);
+            mctx.strokeStyle = '#fff'; mctx.fillStyle = '#fff';
+            mctx.lineWidth = brushSize; mctx.lineCap = 'round'; mctx.lineJoin = 'round';
+            if(points.length === 1){
+                mctx.beginPath(); mctx.arc(points[0].x, points[0].y, brushSize/2, 0, Math.PI*2); mctx.fill();
+            } else {
+                mctx.beginPath();
+                points.forEach((p,i)=> i===0? mctx.moveTo(p.x,p.y):mctx.lineTo(p.x,p.y));
+                mctx.stroke();
+            }
+            const maskData = mctx.getImageData(bx, by, bw, bh).data;
+
+            // capture the CURRENTLY rendered pixels (includes prior drawings/
+            // filters/text already baked in), same approach as background removal
+            const srcCanvas = document.createElement('canvas');
+            srcCanvas.width = canvas.width; srcCanvas.height = canvas.height;
+            srcCanvas.getContext('2d').drawImage(canvas, 0, 0);
+            const sctx = srcCanvas.getContext('2d');
+            const regionData = sctx.getImageData(bx, by, bw, bh);
+
+            inpaintRegion(regionData, bw, bh, maskData);
+            sctx.putImageData(regionData, bx, by);
+
+            pendingLoad = {w: canvas.width, h: canvas.height};
+            img.src = srcCanvas.toDataURL();
+            eraseStatus.textContent = 'Object erased.';
+        } catch(err){
+            eraseStatus.textContent = '⚠️ Erase failed: ' + err.message;
+            console.error('Erase error:', err);
+            render();
+        }
+    }, 20);
+}
+
+// CROP -- correctly convert the crop box (drawn in CSS pixels over #wrap)
+// into the canvas's actual pixel-buffer coordinates, and account for the
+// fact the canvas is not necessarily flush with #wrap.
 function doCrop(){
     if(cropBox.style.display==='none') return;
     const cropRect = cropBox.getBoundingClientRect();
@@ -707,27 +1009,282 @@ function doCrop(){
     const dataUrl = temp.toDataURL();
     cropBox.style.display='none';
     cropStart = null;
-    pendingCropSize = {w, h};
+    pendingLoad = {w, h};
     img.src = dataUrl;
 }
 
 function resetAll(){
-    state = {scale:1,rot:0,skew:0,panX:0,panY:0,filters:{...DEFAULT_FILTERS},drawings:[],texts:[]};
-    syncFilterSliders();
-    pushState(); render();
+    erasing = false; eraseStrokePoints = null;
+    const defaultState = {scale:1,rot:0,skew:0,panX:0,panY:0,filters:{...DEFAULT_FILTERS},drawings:[],texts:[]};
+    if(originalImgSrc && img.src !== originalImgSrc){
+        // a crop/bg-remove/erase has replaced the working image -- Reset needs
+        // to actually reload the original photo, not just clear the filters
+        // sitting on top of whatever image is currently loaded.
+        historyRestore = {w: originalW, h: originalH, stateJSON: JSON.stringify(defaultState), pushAfter: true};
+        img.src = originalImgSrc;
+    } else {
+        state = defaultState;
+        syncFilterSliders();
+        pushState(); render();
+    }
 }
 
+// Each history entry snapshots not just filters/drawings/text but which image
+// was loaded and at what size -- undo/redo across a crop, background removal,
+// or object erase needs to swap the actual image back, not just the filters
+// sitting on top of it.
 function pushState(){
     history = history.slice(0,step+1);
-    history.push(JSON.stringify(state));
+    history.push({stateJSON: JSON.stringify(state), imgSrc: img.src, w: canvas.width, h: canvas.height});
     step++;
 }
-function undo(){if(step>0){step--; state=JSON.parse(history[step]); syncFilterSliders(); render();}}
-function redo(){if(step<history.length-1){step++; state=JSON.parse(history[step]); syncFilterSliders(); render();}}
+function applyHistoryStep(){
+    const entry = history[step];
+    if(img.src === entry.imgSrc){
+        // same underlying image -- no need to reload it, just restore the state on top of it
+        state = JSON.parse(entry.stateJSON);
+        canvas.width = entry.w; canvas.height = entry.h;
+        syncFilterSliders();
+        render();
+    } else {
+        historyRestore = {w: entry.w, h: entry.h, stateJSON: entry.stateJSON, pushAfter: false};
+        img.src = entry.imgSrc;
+    }
+}
+function undo(){ if(step>0){ step--; applyHistoryStep(); } }
+function redo(){ if(step<history.length-1){ step++; applyHistoryStep(); } }
 
 function saveImage(){
     let a=document.createElement('a'); a.download="pro-edit-v2.jpg"; a.href=canvas.toDataURL('image/jpeg',0.9); a.click();
 }
+
+// ---- Background remove/replace (on-device segmentation) ----
+// Uses Google's MediaPipe Selfie Segmentation, loaded lazily from a public
+// CDN on first use. This is a free, unauthenticated ML model file (not an
+// API you call with your photo) -- once downloaded, all processing runs
+// locally in the browser. No image data leaves the device.
+const bgStatus = document.getElementById('bgStatus');
+const btnRemoveBg = document.getElementById('btnRemoveBg');
+let bgMaskCanvas = null;     // raw grayscale mask from the model, kept separate so edge softness can be re-tuned live
+let bgSourceCanvas = null;   // the rendered pixels at the moment segmentation ran
+let bgForegroundCanvas = null; // current cutout (source + processed mask as alpha) -- rebuilt each time softness changes
+let bgPreviewActive = false;
+let selfieSegmentationInstance = null;
+let currentModelSelection = 0; // 0 = "general", 1 = "landscape" -- accuracy genuinely varies by photo, so we let the user flip and retry
+
+function loadScript(src){
+    return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('Could not load the segmentation model from the CDN — check your internet connection and try again.'));
+        document.head.appendChild(s);
+    });
+}
+
+async function ensureSegmentation(){
+    if(!window.SelfieSegmentation){
+        bgStatus.textContent = 'Downloading background-removal model (first time only, needs internet)…';
+        await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js');
+    }
+    if(selfieSegmentationInstance){
+        selfieSegmentationInstance.setOptions({modelSelection: currentModelSelection});
+        return selfieSegmentationInstance;
+    }
+    const seg = new SelfieSegmentation({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
+    });
+    // modelSelection 0 = "general" model -- better edge quality for typical photos.
+    // (1 is the "landscape" model, tuned for wide video-call framing, which was
+    // giving blockier edges on regular portrait/product photos.) Exposed as a
+    // manual toggle below since which one wins genuinely depends on the photo.
+    seg.setOptions({modelSelection: currentModelSelection});
+    selfieSegmentationInstance = seg;
+    return seg;
+}
+
+function drawCheckerboard(context, w, h){
+    const size = 16;
+    for(let y=0; y<h; y+=size){
+        for(let x=0; x<w; x+=size){
+            context.fillStyle = ((Math.floor(x/size) + Math.floor(y/size)) % 2 === 0) ? '#3a3a3a' : '#2a2a2a';
+            context.fillRect(x, y, size, size);
+        }
+    }
+}
+
+// Rebuilds the cutout from the stored raw mask using the current edge-softness
+// value. Two real steps, not just a CSS filter:
+//  1. A small fixed pre-blur smooths the staircase artifacts left over from
+//     upsampling MediaPipe's low-res mask, before we do anything else.
+//  2. A per-pixel S-curve (not CSS contrast()) pushes confident foreground/
+//     background pixels to solid 0/255 while keeping a smooth, controllable
+//     transition band in between -- contrast() either clips too hard (jagged
+//     edges) or too soft (pale halo/ghosting), with no way to tune between
+//     the two independent of how sharp the curve itself is.
+// The user's feather slider is then applied as a final blur on top, purely
+// for the edge-softness look, decoupled from the snap quality above.
+function buildForegroundCanvas(featherPx){
+    const w = canvas.width, h = canvas.height;
+
+    const preBlurred = document.createElement('canvas');
+    preBlurred.width = w; preBlurred.height = h;
+    const pbctx = preBlurred.getContext('2d');
+    pbctx.filter = 'blur(1.2px)';
+    pbctx.drawImage(bgMaskCanvas, 0, 0);
+    pbctx.filter = 'none';
+    const rawMask = pbctx.getImageData(0, 0, w, h);
+
+    const curved = new Uint8ClampedArray(rawMask.data.length);
+    for(let i=0; i<rawMask.data.length; i+=4){
+        const norm = rawMask.data[i] / 255; // mask is grayscale, R=G=B
+        const out = norm < 0.5
+            ? 0.5 * Math.pow(norm*2, 1.8)
+            : 1 - 0.5 * Math.pow((1-norm)*2, 1.8);
+        const v = Math.round(out*255);
+        curved[i]=v; curved[i+1]=v; curved[i+2]=v; curved[i+3]=255;
+    }
+    const curvedCanvas = document.createElement('canvas');
+    curvedCanvas.width = w; curvedCanvas.height = h;
+    curvedCanvas.getContext('2d').putImageData(new ImageData(curved, w, h), 0, 0);
+
+    const processed = document.createElement('canvas');
+    processed.width = w; processed.height = h;
+    const pctx = processed.getContext('2d');
+    pctx.filter = `blur(${featherPx}px)`;
+    pctx.drawImage(curvedCanvas, 0, 0);
+    pctx.filter = 'none';
+    const maskData = pctx.getImageData(0, 0, w, h);
+
+    const out = document.createElement('canvas');
+    out.width = w; out.height = h;
+    const octx = out.getContext('2d');
+    octx.drawImage(bgSourceCanvas, 0, 0);
+    const srcData = octx.getImageData(0, 0, w, h);
+    for(let i=0; i<srcData.data.length; i+=4){
+        srcData.data[i+3] = maskData.data[i];
+    }
+    octx.putImageData(srcData, 0, 0);
+    return out;
+}
+
+function updateBgPreview(){
+    const feather = Number(document.getElementById('bgFeather').value);
+    document.getElementById('bgFeatherVal').textContent = feather + 'px';
+    bgForegroundCanvas = buildForegroundCanvas(feather);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawCheckerboard(ctx, canvas.width, canvas.height);
+    ctx.drawImage(bgForegroundCanvas, 0, 0);
+    bgPreviewActive = true;
+}
+document.getElementById('bgFeather').oninput = updateBgPreview;
+
+async function runBackgroundRemove(){
+    if(!canvas.classList.contains('ready')){
+        bgStatus.textContent = '⚠️ Load a photo first.';
+        return;
+    }
+    btnRemoveBg.disabled = true;
+    document.getElementById('bgApplyRow').style.display = 'none';
+    try{
+        const seg = await ensureSegmentation();
+        bgStatus.textContent = 'Segmenting subject…';
+
+        const results = await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('Timed out waiting for the segmentation model.')), 20000);
+            seg.onResults((r) => { clearTimeout(timeout); resolve(r); });
+            seg.send({image: canvas}).catch((err) => { clearTimeout(timeout); reject(err); });
+        });
+
+        const maskCanvas = document.createElement('canvas');
+        maskCanvas.width = canvas.width; maskCanvas.height = canvas.height;
+        const mctx = maskCanvas.getContext('2d');
+        // MediaPipe's raw mask is much lower-res than the photo; smoothing quality
+        // here matters a lot -- default/low smoothing makes the upsampled mask
+        // blocky, which is the single biggest cause of jagged cutout edges.
+        mctx.imageSmoothingEnabled = true;
+        mctx.imageSmoothingQuality = 'high';
+        mctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
+        bgMaskCanvas = maskCanvas;
+
+        const srcCanvas = document.createElement('canvas');
+        srcCanvas.width = canvas.width; srcCanvas.height = canvas.height;
+        srcCanvas.getContext('2d').drawImage(canvas, 0, 0); // rendered pixels at time of segmentation
+        bgSourceCanvas = srcCanvas;
+
+        updateBgPreview(); // shows the cutout over a checkerboard immediately, using the default softness
+
+        bgStatus.textContent = `Subject isolated (${currentModelSelection===0?'general':'landscape'} model) — `
+            + `adjust edge softness if needed, then pick a background below. This preview stays active `
+            + `while you check other tools -- Apply a background or hit Cancel when you're done.`;
+        document.getElementById('bgApplyRow').style.display = 'flex';
+        document.getElementById('btnBgAltModel').style.display = 'inline-block';
+        document.getElementById('btnBgCancel').style.display = 'inline-block';
+    } catch(err){
+        bgStatus.textContent = '⚠️ Background removal failed: ' + err.message;
+        console.error('Background removal error:', err);
+    } finally {
+        btnRemoveBg.disabled = false;
+    }
+}
+
+function cancelBgPreview(){
+    bgPreviewActive = false;
+    bgForegroundCanvas = null; bgMaskCanvas = null; bgSourceCanvas = null;
+    document.getElementById('bgApplyRow').style.display = 'none';
+    document.getElementById('btnBgAltModel').style.display = 'none';
+    document.getElementById('btnBgCancel').style.display = 'none';
+    bgStatus.textContent = 'Cancelled — back to the original photo.';
+    render();
+}
+
+function retryWithOtherModel(){
+    currentModelSelection = currentModelSelection === 0 ? 1 : 0;
+    if(selfieSegmentationInstance) selfieSegmentationInstance.setOptions({modelSelection: currentModelSelection});
+    runBackgroundRemove();
+}
+
+function commitBgResult(outCanvas){
+    bgPreviewActive = false;
+    pendingLoad = {w: outCanvas.width, h: outCanvas.height};
+    img.src = outCanvas.toDataURL();
+    bgStatus.textContent = 'Background applied.';
+    document.getElementById('bgApplyRow').style.display = 'none';
+    document.getElementById('btnBgAltModel').style.display = 'none';
+    document.getElementById('btnBgCancel').style.display = 'none';
+    bgForegroundCanvas = null; bgMaskCanvas = null; bgSourceCanvas = null;
+}
+
+function applyBgColor(){
+    if(!bgForegroundCanvas){ bgStatus.textContent = '⚠️ Tap "Remove Background" first.'; return; }
+    const color = document.getElementById('bgColor').value;
+    const out = document.createElement('canvas');
+    out.width = canvas.width; out.height = canvas.height;
+    const octx = out.getContext('2d');
+    octx.fillStyle = color; octx.fillRect(0, 0, out.width, out.height);
+    octx.drawImage(bgForegroundCanvas, 0, 0);
+    commitBgResult(out);
+}
+
+document.getElementById('bgImageFile').onchange = (e) => {
+    if(!bgForegroundCanvas){ bgStatus.textContent = '⚠️ Tap "Remove Background" first.'; e.target.value=''; return; }
+    const file = e.target.files[0]; if(!file) return;
+    const bgImg = new Image();
+    bgImg.onload = () => {
+        const out = document.createElement('canvas');
+        out.width = canvas.width; out.height = canvas.height;
+        const octx = out.getContext('2d');
+        // cover-fit the chosen photo behind the subject
+        const scale = Math.max(out.width/bgImg.width, out.height/bgImg.height);
+        const dw = bgImg.width*scale, dh = bgImg.height*scale;
+        octx.drawImage(bgImg, (out.width-dw)/2, (out.height-dh)/2, dw, dh);
+        octx.drawImage(bgForegroundCanvas, 0, 0);
+        commitBgResult(out);
+    };
+    bgImg.onerror = () => { bgStatus.textContent = '⚠️ Could not load that image file.'; };
+    bgImg.src = URL.createObjectURL(file);
+    e.target.value = '';
+};
 
 // Double click / double-tap on crop button to apply crop
 document.getElementById('btnCrop').ondblclick = doCrop;
@@ -737,6 +1294,136 @@ document.getElementById('btnCrop').addEventListener('touchend', ()=>{
     if(now - lastCropTap < 350) doCrop();
     lastCropTap = now;
 });
+
+// ---- EXIF viewer + remover ----
+// Parses the raw JPEG bytes ourselves (no library) to read Make/Model/date/
+// GPS location, purely for display -- this data is read, never sent anywhere.
+// The "remover" part is really just a fact worth stating clearly: canvas.
+// toDataURL() (used by Save) re-encodes pixels from scratch and never
+// carries EXIF over, so anything exported from this editor is already
+// metadata-free automatically. This panel exists so you can *see* what was
+// in the original file before that happens.
+const exifContent = document.getElementById('exifContent');
+const EXIF_TAG_NAMES = {
+    0x010F: 'Camera make', 0x0110: 'Camera model', 0x0112: 'Orientation',
+    0x0132: 'File date/time', 0x9003: 'Date taken',
+    0x829A: 'Exposure time', 0x829D: 'F-number', 0x8827: 'ISO', 0x920A: 'Focal length'
+};
+
+function getRational(view, offset, little){
+    const num = view.getUint32(offset, little), den = view.getUint32(offset+4, little);
+    return den !== 0 ? num/den : 0;
+}
+
+function readIFD(view, tiffStart, ifdOffset, little){
+    const entries = {};
+    const numEntries = view.getUint16(tiffStart+ifdOffset, little);
+    for(let i=0; i<numEntries; i++){
+        const entryOffset = tiffStart+ifdOffset+2+i*12;
+        const tag = view.getUint16(entryOffset, little);
+        const type = view.getUint16(entryOffset+2, little);
+        const count = view.getUint32(entryOffset+4, little);
+        const typeSizes = {1:1,2:1,3:2,4:4,5:8,7:1,9:4,10:8};
+        const size = (typeSizes[type]||1) * count;
+        const valueFieldOffset = entryOffset+8;
+        const dataOffset = size <= 4 ? valueFieldOffset : tiffStart + view.getUint32(valueFieldOffset, little);
+
+        let value = null;
+        if(type === 2){ // ASCII
+            let str = '';
+            for(let j=0; j<count-1; j++) str += String.fromCharCode(view.getUint8(dataOffset+j));
+            value = str;
+        } else if(type === 3){ value = view.getUint16(dataOffset, little); }
+        else if(type === 4){ value = view.getUint32(dataOffset, little); }
+        else if(type === 5){ value = getRational(view, dataOffset, little); }
+        entries[tag] = {value, dataOffset, count, type};
+    }
+    return entries;
+}
+
+function parseExif(buf){
+    const view = new DataView(buf);
+    if(view.getUint16(0, false) !== 0xFFD8) return null; // not a JPEG -- most other formats (PNG/WebP) rarely carry EXIF anyway
+    let offset = 2;
+    while(offset < view.byteLength - 4){
+        if(view.getUint8(offset) !== 0xFF) break;
+        const marker = view.getUint8(offset+1);
+        if(marker === 0xD8 || marker === 0xD9){ offset += 2; continue; }
+        if(marker === 0xDA) break; // start of scan -- no more markers to check
+        const size = view.getUint16(offset+2, false);
+        if(marker === 0xE1 && size > 8){
+            const h1=view.getUint8(offset+4), h2=view.getUint8(offset+5), h3=view.getUint8(offset+6), h4=view.getUint8(offset+7);
+            if(String.fromCharCode(h1,h2,h3,h4) === 'Exif'){
+                const tiffStart = offset+10;
+                const little = view.getUint16(tiffStart, false) === 0x4949;
+                const firstIFDOffset = view.getUint32(tiffStart+4, little);
+                const ifd0 = readIFD(view, tiffStart, firstIFDOffset, little);
+
+                const tags = {};
+                for(const [tagHex, name] of Object.entries(EXIF_TAG_NAMES)){
+                    if(ifd0[tagHex]) tags[name] = ifd0[tagHex].value;
+                }
+                if(ifd0[0x8769]){ // pointer to the Exif sub-IFD (date taken, exposure, etc.)
+                    const exifIFD = readIFD(view, tiffStart, ifd0[0x8769].value, little);
+                    for(const [tagHex, name] of Object.entries(EXIF_TAG_NAMES)){
+                        if(exifIFD[tagHex]) tags[name] = exifIFD[tagHex].value;
+                    }
+                }
+
+                let gps = null;
+                if(ifd0[0x8825]){ // pointer to the GPS sub-IFD
+                    const gpsIFD = readIFD(view, tiffStart, ifd0[0x8825].value, little);
+                    const dms = (entry) => entry ? [
+                        getRational(view, entry.dataOffset, little),
+                        getRational(view, entry.dataOffset+8, little),
+                        getRational(view, entry.dataOffset+16, little)
+                    ] : null;
+                    const latDms = dms(gpsIFD[2]), lonDms = dms(gpsIFD[4]);
+                    if(latDms && lonDms){
+                        let lat = latDms[0] + latDms[1]/60 + latDms[2]/3600;
+                        let lon = lonDms[0] + lonDms[1]/60 + lonDms[2]/3600;
+                        if(gpsIFD[1] && gpsIFD[1].value === 'S') lat = -lat;
+                        if(gpsIFD[3] && gpsIFD[3].value === 'W') lon = -lon;
+                        gps = {lat, lon};
+                    }
+                }
+                return {tags, gps};
+            }
+        }
+        offset += 2 + size;
+    }
+    return null;
+}
+
+function readExifFromFile(file){
+    exifContent.textContent = 'Reading…';
+    file.arrayBuffer().then(buf => {
+        let result = null;
+        try{ result = parseExif(buf); } catch(err){ console.error('EXIF parse error:', err); }
+        renderExifPanel(result, file);
+    }).catch(() => { exifContent.textContent = 'Could not read this file.'; });
+}
+
+function renderExifPanel(result, file){
+    if(!result || (Object.keys(result.tags).length === 0 && !result.gps)){
+        exifContent.textContent = `No EXIF metadata found in "${file.name}" (common for PNG/WebP, screenshots, or already-stripped photos).`;
+        return;
+    }
+    let rows = '';
+    for(const [name, value] of Object.entries(result.tags)){
+        rows += `<tr><td>${name}</td><td>${String(value).replace(/</g,'&lt;')}</td></tr>`;
+    }
+    let gpsHtml = '';
+    if(result.gps){
+        const mapsUrl = `https://www.google.com/maps?q=${result.gps.lat},${result.gps.lon}`;
+        rows += `<tr><td>GPS location</td><td>${result.gps.lat.toFixed(5)}, ${result.gps.lon.toFixed(5)} `
+              + `— <a href="${mapsUrl}" target="_blank" rel="noopener" style="color:#4CAF50">view on map</a></td></tr>`;
+        gpsHtml = '<div id="exifGpsWarning">⚠️ This photo has your exact location embedded. '
+                + 'Anyone you send the original file to (not this editor\'s export) can see it too.</div>';
+    }
+    exifContent.innerHTML = `<table>${rows}</table>${gpsHtml}`
+        + `<div class="row" style="margin-top:8px"><button onclick="saveImage()">⬇️ Download EXIF-free copy</button></div>`;
+}
 </script>
 </body>
 </html>

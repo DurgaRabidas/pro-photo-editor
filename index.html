@@ -7,11 +7,11 @@
 <style>
     body {background:#121212; color:#eee; margin:0; font-family:system-ui; display:flex; flex-direction:column; height:100vh}
     h3 {text-align:center; margin:10px 0}
-    #wrap {flex:1; position:relative; background:#000; display:flex; justify-content:center; align-items:center; overflow:hidden}
+    #wrap {flex:1; min-height:140px; position:relative; background:#000; display:flex; justify-content:center; align-items:center; overflow:hidden}
     canvas {position:absolute; max-width:100%; max-height:100%; touch-action:none; display:none}
     canvas.ready {display:block}
     #toolbar {background:#1f1f1f; padding:8px; display:flex; gap:8px; overflow-x:auto; border-top:1px solid #333}
-    #subtools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:10px}
+    #subtools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:10px; max-height:42vh; overflow-y:auto}
     #subtools.active {display:flex}
   .row {display:flex; gap:10px; align-items:center; flex-wrap:wrap; position:relative}
     .visually-hidden-file {position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0}
@@ -23,25 +23,27 @@
     #colorPresets {display:flex; gap:6px; flex-wrap:wrap}
   .color-dot {width:28px; height:28px; border-radius:50%; border:2px solid #555; cursor:pointer}
   .color-dot.active {border:2px solid #fff}
+  .studio-swatch {width:52px; height:52px; border-radius:8px; border:2px solid #555; cursor:pointer; display:flex; align-items:flex-end; justify-content:center; overflow:hidden}
+  .studio-swatch span {font-size:9px; color:#fff; background:rgba(0,0,0,0.55); width:100%; text-align:center; padding:1px 0; line-height:1.2}
     #upload-label {padding:15px 30px; background:#4CAF50; border-radius:10px; cursor:pointer}
     #uploadStatus {display:none; position:absolute; bottom:8px; left:50%; transform:translateX(-50%); max-width:90%; background:rgba(0,0,0,0.85); color:#ffcc80; padding:10px 14px; border-radius:8px; font-size:13px; line-height:1.4; text-align:center}
     #upload {position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0}
   .crop-box {position:absolute; border:2px dashed #fff; background:rgba(0,0,0,0.3); display:none}
     #cropHint {position:absolute; bottom:8px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); padding:6px 12px; border-radius:6px; font-size:12px; display:none; white-space:nowrap}
-    #filterTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px}
+    #filterTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px; max-height:42vh; overflow-y:auto}
     #filterTools.active {display:flex}
     .filter-row {display:grid; grid-template-columns:90px 1fr 44px; align-items:center; gap:8px}
     .filter-row input[type=range] {background:transparent; padding:0; accent-color:#4CAF50}
     .filter-row span {text-align:right; font-size:12px; color:#aaa}
     #moveHint {position:absolute; bottom:8px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); padding:6px 12px; border-radius:6px; font-size:12px; display:none; white-space:nowrap}
-    #aiTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px}
+    #aiTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px; max-height:42vh; overflow-y:auto}
     #aiTools.active {display:flex}
     #aiStatus {font-size:13px; color:#eee; min-height:16px; background:#1a1a1a; padding:8px; border-radius:6px}
-    #bgTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px}
+    #bgTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px; max-height:42vh; overflow-y:auto}
     #bgTools.active {display:flex}
     #bgWarning {font-size:12px; color:#90caf9; background:#10233a; padding:8px; border-radius:6px; line-height:1.4}
     #bgStatus {font-size:13px; color:#eee; min-height:16px; background:#1a1a1a; padding:8px; border-radius:6px}
-    #exifTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px}
+    #exifTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px; max-height:42vh; overflow-y:auto}
     #exifTools.active {display:flex}
     #exifSaveNote {font-size:12px; color:#90caf9; background:#10233a; padding:8px; border-radius:6px; line-height:1.4}
     #exifContent {font-size:13px; color:#eee; background:#1a1a1a; padding:8px; border-radius:6px}
@@ -49,11 +51,19 @@
     #exifContent td {padding:4px 6px; border-bottom:1px solid #333; vertical-align:top}
     #exifContent td:first-child {color:#aaa; white-space:nowrap; width:40%}
     #exifGpsWarning {color:#ffcc80; margin-top:6px; font-size:12px}
-    #eraseTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px}
+    #eraseTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px; max-height:42vh; overflow-y:auto}
+    #scanTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px; max-height:42vh; overflow-y:auto}
+    #scanTools.active {display:flex}
+    #scanStatus {font-size:13px; color:#eee; background:#1a1a1a; padding:8px; border-radius:6px}
     #bgApplyRow {display:none; flex-direction:column; gap:8px}
     #eraseTools.active {display:flex}
     #eraseStatus {font-size:13px; color:#eee; min-height:16px; background:#1a1a1a; padding:8px; border-radius:6px}
     #eraseHint {position:absolute; bottom:8px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); padding:6px 12px; border-radius:6px; font-size:12px; display:none; white-space:nowrap}
+    #textBehindTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px; max-height:42vh; overflow-y:auto}
+    #textBehindTools.active {display:flex}
+    #textBehindStatus {font-size:13px; color:#eee; min-height:16px; background:#1a1a1a; padding:8px; border-radius:6px}
+    #textBehindHint {position:absolute; bottom:8px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); padding:6px 12px; border-radius:6px; font-size:12px; display:none; white-space:nowrap; text-align:center; max-width:90%}
+    #scanMagnifier {position:absolute; width:150px; height:150px; border-radius:50%; border:3px solid #00ff88; box-shadow:0 4px 14px rgba(0,0,0,0.6); display:none; pointer-events:none; z-index:50; background:#000}
     button:disabled {opacity:0.5; cursor:not-allowed}
 </style>
 </head>
@@ -75,6 +85,8 @@
     <div id="cropHint">Drag to draw a crop box, then double-tap the ✂️ Crop button to apply</div>
     <div id="moveHint">Drag anywhere on the image to pan it</div>
     <div id="eraseHint">Brush over the object, lift your finger/mouse to erase it</div>
+    <div id="textBehindHint">Tap the canvas to place text — it'll render behind the detected subject</div>
+    <canvas id="scanMagnifier" width="150" height="150"></canvas>
 </div>
 
 <div id="subtools">
@@ -89,6 +101,22 @@
     <div class="row" id="sizeRow">
         <label>Thickness: <input type="range" id="brushSize" min="1" max="80" value="5"></label>
         <span id="sizeVal">5px</span>
+    </div>
+    <div class="row" id="fontRow">
+        <label for="fontSelect">Font:</label>
+        <select id="fontSelect">
+            <option value="Arial" style="font-family:Arial">Arial</option>
+            <option value="Georgia" style="font-family:Georgia">Georgia</option>
+            <option value="'Times New Roman'" style="font-family:'Times New Roman'">Times New Roman</option>
+            <option value="'Courier New'" style="font-family:'Courier New'">Courier New</option>
+            <option value="Verdana" style="font-family:Verdana">Verdana</option>
+            <option value="'Trebuchet MS'" style="font-family:'Trebuchet MS'">Trebuchet MS</option>
+            <option value="Impact" style="font-family:Impact">Impact</option>
+            <option value="'Comic Sans MS'" style="font-family:'Comic Sans MS'">Comic Sans MS</option>
+            <option value="cursive" style="font-family:cursive">Cursive</option>
+            <option value="fantasy" style="font-family:fantasy">Fantasy</option>
+            <option value="monospace" style="font-family:monospace">Monospace</option>
+        </select>
     </div>
     <div class="row">
         <label>Color: <input type="color" id="brushColor" value="#ff0000"></label>
@@ -185,6 +213,31 @@
             <label for="bgImageFile" id="bgImageLabel" style="padding:8px 12px; background:#4CAF50; border-radius:8px; cursor:pointer">🖼️ Use photo from device</label>
             <input type="file" id="bgImageFile" accept="image/*" class="visually-hidden-file">
         </div>
+        <div class="row">
+            <label>Studio backgrounds (no upload):</label>
+        </div>
+        <div class="row" id="studioBackdropRow" style="flex-wrap:wrap"></div>
+        <div class="filter-row">
+            <label for="bgBlurAmount">🌫️ Blur background</label>
+            <input type="range" id="bgBlurAmount" min="0" max="30" value="0">
+            <span id="bgBlurAmountVal">0px</span>
+        </div>
+        <div class="row">
+            <button onclick="applyBgBlur()">Apply blur</button>
+        </div>
+    </div>
+</div>
+
+<div id="textBehindTools">
+    <div class="row">
+        <button id="btnDetectSubject" onclick="detectSubjectForTextBehind()">🔍 Detect Subject</button>
+        <button onclick="retryWithOtherModel('textBehind')">🔁 Try other model</button>
+    </div>
+    <div id="textBehindStatus">Tap "Detect Subject" first, then tap the canvas to place text — it'll be layered behind whatever the model identifies as the main subject. Use the color and font pickers above to style it.</div>
+    <div class="filter-row">
+        <label for="textBehindFeather">Edge softness</label>
+        <input type="range" id="textBehindFeather" min="0" max="20" value="3">
+        <span id="textBehindFeatherVal">3px</span>
     </div>
 </div>
 
@@ -194,7 +247,15 @@
         <input type="range" id="eraseSize" min="10" max="120" value="40">
         <span id="eraseSizeVal">40px</span>
     </div>
-    <div id="eraseStatus">Brush over an unwanted object or blemish, then release to remove it. Works best on small-to-medium objects against a fairly simple background.</div>
+    <div id="eraseStatus">Brush over an unwanted object or blemish, then release to remove it. Copies real texture from nearby areas (not a blur) for small-to-medium strokes; larger areas fall back to a smoother fill so it stays fast.</div>
+</div>
+
+<div id="scanTools">
+    <div class="row">
+        <button onclick="applyPerspectiveCorrection()">✂️ Crop &amp; Straighten</button>
+        <button onclick="resetScanCorners()">↺ Reset corners</button>
+    </div>
+    <div id="scanStatus">Drag the 4 green corner dots onto the corners of the tilted book/document/board. If a page is curved near the spine, also drag the 2 blue dots (top/bottom middle) onto the actual curve of the text -- then tap "Crop & Straighten" to cut out exactly the dotted area and flatten it.</div>
 </div>
 
 <div id="exifTools">
@@ -215,7 +276,9 @@
     <button id="btnFilter" onclick="setMode('filter')">🎨 Filters</button>
     <button id="btnAi" onclick="setMode('ai')">✨ AI Enhance</button>
     <button id="btnBg" onclick="setMode('bg')">🪄 Background</button>
+    <button id="btnTextBehind" onclick="setMode('textBehind')">🫥 Text Behind Subject</button>
     <button id="btnErase" onclick="setMode('erase')">🧹 Object Eraser</button>
+    <button id="btnScan" onclick="setMode('scan')">📄 Document Scanner</button>
     <button id="btnExif" onclick="setMode('exif')">🔎 EXIF Info</button>
     <button onclick="undo()">↩️ Undo</button>
     <button onclick="redo()">↪️ Redo</button>
@@ -242,6 +305,64 @@ let drawing = false;
 let erasing = false;
 let eraseStrokePoints = null; // content-space points while dragging the eraser
 let eraseBrushSize = 40;
+
+// ---- Document Scanner state ----
+let scanCorners = null;          // {tl,tr,br,bl,tm,bm} in content-space -- tm/bm let you bow the top/bottom edges for curved book pages
+let scanCornersForImgSrc = null; // which img.src these corners belong to (auto-reset when the photo changes)
+let draggingCornerKey = null;
+let scanDragSnapshot = null; // content-space photo snapshot, cached once per drag so the magnifier stays smooth
+const scanMagnifier = document.getElementById('scanMagnifier');
+const scanMagnifierCtx = scanMagnifier.getContext('2d');
+const scanStatus = document.getElementById('scanStatus');
+function scanHandleRadius(){ return Math.max(20, Math.min(canvas.width, canvas.height) * 0.03); }
+
+// Loupe-style magnifier shown while dragging a scan corner/curve handle --
+// zooms in on the area under your finger (offset above/below it, not under
+// it, so your finger doesn't block the very thing you're trying to see) so
+// you can place the dot precisely instead of guessing where the actual edge
+// is under your fingertip.
+function updateScanMagnifier(contentPos, clientX, clientY){
+    if(!scanDragSnapshot) return;
+    const mSize = 150;
+    const srcR = Math.max(40, Math.min(canvas.width, canvas.height) * 0.05); // content-space radius of the zoomed region
+
+    scanMagnifierCtx.clearRect(0, 0, mSize, mSize);
+    scanMagnifierCtx.save();
+    scanMagnifierCtx.beginPath();
+    scanMagnifierCtx.arc(mSize/2, mSize/2, mSize/2, 0, Math.PI*2);
+    scanMagnifierCtx.clip();
+    scanMagnifierCtx.imageSmoothingEnabled = true;
+    const sx = Math.max(0, Math.min(canvas.width - srcR*2, contentPos.x - srcR));
+    const sy = Math.max(0, Math.min(canvas.height - srcR*2, contentPos.y - srcR));
+    scanMagnifierCtx.drawImage(scanDragSnapshot, sx, sy, srcR*2, srcR*2, 0, 0, mSize, mSize);
+    scanMagnifierCtx.restore();
+
+    // crosshair marking exactly where the dot will land (accounting for any
+    // clamping above, since the crop can shift near the photo's edges)
+    const relX = ((contentPos.x - sx) / (srcR*2)) * mSize;
+    const relY = ((contentPos.y - sy) / (srcR*2)) * mSize;
+    scanMagnifierCtx.strokeStyle = '#ff3355'; scanMagnifierCtx.lineWidth = 2;
+    scanMagnifierCtx.beginPath();
+    scanMagnifierCtx.moveTo(relX-12, relY); scanMagnifierCtx.lineTo(relX+12, relY);
+    scanMagnifierCtx.moveTo(relX, relY-12); scanMagnifierCtx.lineTo(relX, relY+12);
+    scanMagnifierCtx.stroke();
+    scanMagnifierCtx.beginPath(); scanMagnifierCtx.arc(relX, relY, 4, 0, Math.PI*2); scanMagnifierCtx.stroke();
+
+    // position near the touch point but offset well clear of it -- default
+    // above the finger, flipping below if there isn't room (near the top of the photo)
+    const wrapRect = wrap.getBoundingClientRect();
+    const localX = clientX - wrapRect.left, localY = clientY - wrapRect.top;
+    let left = localX - mSize/2, top = localY - mSize - 50;
+    if(top < 0) top = localY + 50;
+    left = Math.max(4, Math.min(wrapRect.width - mSize - 4, left));
+    scanMagnifier.style.left = left + 'px';
+    scanMagnifier.style.top = top + 'px';
+    scanMagnifier.style.display = 'block';
+}
+function hideScanMagnifier(){
+    scanMagnifier.style.display = 'none';
+    scanDragSnapshot = null;
+}
 let selectedObj = null; // for text selection
 let history = []; let step = -1;
 let cropStart = null; // {x,y} in wrap-relative CSS px
@@ -254,7 +375,7 @@ let state = {
     drawings: [], // {color, size, points:[]}  -- points are in CONTENT space (pre-transform)
     texts: [] // {txt,x,y,size,font,color,rot,skew} -- x,y are in CONTENT space
 };
-let brush = {color:'#ff0000', size:5, style:'marker'};
+let brush = {color:'#ff0000', size:5, style:'marker', font:'Arial'};
 
 document.querySelectorAll('.brush-style-btn').forEach(btn=>{
     btn.onclick = () => {
@@ -464,12 +585,21 @@ function applyBrushColor(c){
     updateActivePreset(c);
     // If a text object is currently selected, recolor it live too --
     // that's what makes the color panel actually useful in Text mode.
-    if(mode==='text' && selectedObj){
+    if((mode==='text' || mode==='textBehind') && selectedObj){
         selectedObj.color = c;
         render();
         pushState();
     }
 }
+
+document.getElementById('fontSelect').onchange = e => {
+    brush.font = e.target.value;
+    if((mode==='text' || mode==='textBehind') && selectedObj){
+        selectedObj.font = e.target.value;
+        render();
+        pushState();
+    }
+};
 
 presets.forEach(c=>{
     let d=document.createElement('div'); d.className='color-dot'; d.style.background=c;
@@ -556,9 +686,14 @@ img.onload = () => {
         document.getElementById('upload-label').style.display = 'none';
         // a fresh photo invalidates any bg-removal preview from the previous one
         bgPreviewActive = false; bgForegroundCanvas = null; bgMaskCanvas = null; bgSourceCanvas = null;
+        blurPreviewActive = false; blurPreviewCanvas = null;
         document.getElementById('bgApplyRow').style.display = 'none';
         document.getElementById('btnBgAltModel').style.display = 'none';
         document.getElementById('btnBgCancel').style.display = 'none';
+        // ...and any subject cutout from the previous photo too
+        subjectMaskCanvas = null; subjectSourceCanvas = null; subjectCutoutCanvas = null; subjectCutoutForImgSrc = null;
+        document.getElementById('textBehindHint').style.display = 'none';
+        textBehindStatus.textContent = 'Tap "Detect Subject" first, then tap the canvas to place text — it\'ll be layered behind whatever the model identifies as the main subject. Use the color and font pickers above to style it.';
         // remember the ORIGINAL uploaded photo (post-downscale if that applied)
         // so Reset can always get all the way back to it, even after a crop,
         // background removal, or object erase has replaced the working image.
@@ -578,25 +713,177 @@ img.onerror = () => {
 }
 
 function setMode(m){
+    const prevMode = mode;
     mode = m;
+
+    // A pending Background-Replace or Blur preview overrides the ENTIRE
+    // canvas in render() (it has to, that's how the checkerboard/blur
+    // preview works) -- which means if you leave it uncommitted and switch
+    // to any other tool, that tool's own canvas overlay (crop box, scan
+    // corners, draw strokes, etc.) would never even get drawn, since
+    // render() returns before reaching that code. Releasing the override
+    // here (but keeping bgForegroundCanvas etc. intact) fixes that: other
+    // tools see the real photo, and switching back to Background resumes
+    // exactly where you left off.
+    if(m !== 'bg' && (bgPreviewActive || blurPreviewActive)){
+        bgPreviewActive = false;
+        blurPreviewActive = false;
+    }
+    if(m === 'bg' && bgForegroundCanvas && !bgPreviewActive && !blurPreviewActive){
+        bgPreviewActive = true; // resume the checkerboard pick-a-background preview
+    }
+
     document.querySelectorAll('#toolbar button').forEach(b=>b.classList.remove('active'));
     document.getElementById('btn'+m.charAt(0).toUpperCase()+m.slice(1)).classList.add('active');
-    document.getElementById('subtools').classList.toggle('active', m==='draw' || m==='text');
+    document.getElementById('subtools').classList.toggle('active', m==='draw' || m==='text' || m==='textBehind');
     document.getElementById('sizeRow').style.display = m==='draw' ? 'flex' : 'none';
     document.getElementById('brushStyleRow').style.display = m==='draw' ? 'flex' : 'none';
+    document.getElementById('fontRow').style.display = (m==='text' || m==='textBehind') ? 'flex' : 'none';
     document.getElementById('filterTools').classList.toggle('active', m==='filter');
     document.getElementById('aiTools').classList.toggle('active', m==='ai');
     if(m==='ai') runAIEnhance(); // one tap opens the tool AND runs the analysis -- no second click needed
     document.getElementById('bgTools').classList.toggle('active', m==='bg');
+    document.getElementById('textBehindTools').classList.toggle('active', m==='textBehind');
+    document.getElementById('textBehindHint').style.display = (m==='textBehind' && subjectCutoutCanvas) ? 'block' : 'none';
+    if(m==='textBehind' && !subjectCutoutCanvas) detectSubjectForTextBehind(); // one tap opens the tool AND detects the subject
     document.getElementById('eraseTools').classList.toggle('active', m==='erase');
     document.getElementById('eraseHint').style.display = m==='erase' ? 'block' : 'none';
+    document.getElementById('scanTools').classList.toggle('active', m==='scan');
+    if(m==='scan' && canvas.classList.contains('ready') && (!scanCorners || scanCornersForImgSrc !== img.src)){
+        resetScanCorners(); // fresh corners for a photo we haven't scanned yet, or a different photo than last time
+    }
     document.getElementById('exifTools').classList.toggle('active', m==='exif');
     if(m==='filter') syncFilterSliders();
-    cropBox.style.display = 'none';
+    // Only reset the crop box when actually switching INTO or OUT OF crop
+    // mode. Without this guard, tapping the Crop toolbar button to
+    // double-tap-apply re-fires setMode('crop') on every single tap (touch
+    // devices synthesize a click after touchend, and each half of a desktop
+    // double-click also fires its own plain click), and since setMode('crop')
+    // was unconditionally wiping the crop box, the double-tap gesture could
+    // never actually complete -- the first tap erased the box before the
+    // second tap could register.
+    if(m !== prevMode){
+        cropBox.style.display = 'none';
+        cropStart = null;
+    }
     cropHint.style.display = m==='crop' ? 'block' : 'none';
     document.getElementById('moveHint').style.display = m==='move' ? 'block' : 'none';
-    cropStart = null;
     panStart = null;
+    draggingCornerKey = null;
+    hideScanMagnifier();
+    render(); // always redraw on a mode switch -- several branches above only conditionally do (e.g. re-entering scan mode with corners already valid), and this makes sure the canvas is never left showing a stale frame from before the switch
+}
+
+// Draws the filtered photo onto any canvas context (used by the main render
+// loop and by the clean segmentation snapshot below).
+function drawBaseImageOn(targetCtx){
+    updateWbMatrix(state.filters);
+    targetCtx.filter = filterCssString(state.filters);
+    targetCtx.drawImage(img, 0, 0);
+    targetCtx.filter = 'none';
+}
+
+// Draws every brush stroke onto any canvas context, per its style. Shared by
+// the main render loop and the clean segmentation snapshot below, so there's
+// exactly one place that knows how to draw a stroke.
+function drawStrokesOn(targetCtx){
+    state.drawings.forEach(d=>{
+        targetCtx.save();
+        const style = d.style || 'marker';
+        if(style === 'highlighter'){
+            targetCtx.globalAlpha = 0.35;
+            targetCtx.strokeStyle = d.color; targetCtx.lineWidth = d.size*2; targetCtx.lineCap='square'; targetCtx.lineJoin='round';
+            targetCtx.beginPath(); d.points.forEach((p,i)=> i===0? targetCtx.moveTo(p.x,p.y):targetCtx.lineTo(p.x,p.y)); targetCtx.stroke();
+        } else if(style === 'pencil'){
+            targetCtx.globalAlpha = 0.85;
+            targetCtx.strokeStyle = d.color; targetCtx.lineWidth = Math.max(0.5, d.size*0.35); targetCtx.lineCap='round'; targetCtx.lineJoin='round';
+            targetCtx.beginPath(); d.points.forEach((p,i)=> i===0? targetCtx.moveTo(p.x,p.y):targetCtx.lineTo(p.x,p.y)); targetCtx.stroke();
+        } else if(style === 'spray'){
+            targetCtx.globalAlpha = 0.55;
+            targetCtx.fillStyle = d.color;
+            d.points.forEach(p=>{
+                targetCtx.beginPath(); targetCtx.arc(p.x, p.y, Math.max(0.8, d.size*0.08), 0, Math.PI*2); targetCtx.fill();
+            });
+        } else if(style === 'calligraphy'){
+            targetCtx.strokeStyle = d.color; targetCtx.lineCap = 'round';
+            for(let i=1; i<d.points.length; i++){
+                const p0 = d.points[i-1], p1 = d.points[i];
+                const angle = Math.atan2(p1.y-p0.y, p1.x-p0.x);
+                const width = Math.max(1, d.size * (0.25 + 0.75*Math.abs(Math.cos(angle - Math.PI/4))));
+                targetCtx.lineWidth = width;
+                targetCtx.beginPath(); targetCtx.moveTo(p0.x,p0.y); targetCtx.lineTo(p1.x,p1.y); targetCtx.stroke();
+            }
+        } else { // marker (default / original behavior)
+            targetCtx.strokeStyle=d.color; targetCtx.lineWidth=d.size; targetCtx.lineCap='round'; targetCtx.lineJoin='round';
+            targetCtx.beginPath(); d.points.forEach((p,i)=> i===0? targetCtx.moveTo(p.x,p.y):targetCtx.lineTo(p.x,p.y)); targetCtx.stroke();
+        }
+        targetCtx.restore();
+    });
+}
+
+// A clean snapshot of the photo (image + filters + drawings, transformed the
+// same way as the main canvas) with NO text and NO subject cutout on it.
+// Used as the actual input to subject detection and as the cutout's source
+// pixels -- feeding the segmentation model a canvas that already has text
+// drawn on/near the subject visibly confuses it and degrades the mask, and
+// re-detecting later would otherwise bake in whatever was already composited.
+// A snapshot of the photo (image + filters + drawings [+ optionally text])
+// in CONTENT-SPACE -- i.e. WITHOUT the current pan/zoom/rotate view
+// transform applied. This is the coordinate system that scanCorners,
+// eraseStrokePoints, drawings, and text positions are all actually stored
+// in. The live `canvas`, by contrast, has the CURRENT view transform baked
+// into its pixels -- which silently stops matching content-space
+// coordinates the moment you've panned, zoomed, or rotated the view. Any
+// tool that samples pixels using content-space coordinates (Object Eraser,
+// Document Scanner, subject detection for Text Behind Subject) needs THIS,
+// not a snapshot of the live canvas, or its result quietly operates on the
+// wrong region/gets double-transformed once the view isn't at the identity
+// transform -- which is exactly what was making the scanner (and equally,
+// though less obviously, the eraser) misbehave after panning/zooming/rotating.
+function renderContentSpaceSnapshot(includeText){
+    const snap = document.createElement('canvas');
+    snap.width = canvas.width; snap.height = canvas.height;
+    const sctx = snap.getContext('2d');
+    drawBaseImageOn(sctx);
+    drawStrokesOn(sctx);
+    if(includeText){
+        const hasValidSubjectCutout = subjectCutoutCanvas && subjectCutoutForImgSrc === img.src;
+        state.texts.filter(t=>t.behind).forEach(t=>drawTextObj(t, sctx));
+        if(hasValidSubjectCutout) sctx.drawImage(subjectCutoutCanvas, 0, 0);
+        state.texts.filter(t=>!t.behind).forEach(t=>drawTextObj(t, sctx));
+    }
+    return snap;
+}
+
+// Draws one text object's content (no selection box) with its own rotate/skew.
+function drawTextObj(t, targetCtx){
+    targetCtx = targetCtx || ctx;
+    targetCtx.save();
+    targetCtx.translate(t.x, t.y);
+    targetCtx.rotate(t.rot * Math.PI/180);
+    targetCtx.transform(1,0,t.skew,1,0,0);
+    targetCtx.fillStyle=t.color;
+    targetCtx.font=`${t.size}px ${t.font}`;
+    targetCtx.fillText(t.txt,0,0);
+    targetCtx.restore();
+}
+
+// Draws just the green selection outline for one text object. Kept separate
+// from drawTextObj and always drawn as the very last thing in render() so a
+// selected "behind subject" text's outline stays visible even where the
+// subject cutout would otherwise paint over it -- otherwise you can select
+// and even be dragging it, but have no visible indication of where it is or
+// its bounds wherever it falls under the subject.
+function drawTextSelectionBox(t){
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    ctx.rotate(t.rot * Math.PI/180);
+    ctx.transform(1,0,t.skew,1,0,0);
+    ctx.font=`${t.size}px ${t.font}`;
+    let w = ctx.measureText(t.txt).width;
+    ctx.strokeStyle='#00ff00'; ctx.lineWidth=2;
+    ctx.strokeRect(-5,-t.size, w+10, t.size+10);
+    ctx.restore();
 }
 
 function render(){
@@ -613,68 +900,48 @@ function render(){
         ctx.drawImage(bgForegroundCanvas, 0, 0);
         return;
     }
+    // Live "blur background" preview (video-call style): blurred original
+    // photo behind, sharp subject cutout on top. Separate from the
+    // checkerboard preview above since here the backdrop IS the real photo,
+    // not a transparent pick-a-background canvas.
+    if(blurPreviewActive && blurPreviewCanvas){
+        ctx.drawImage(blurPreviewCanvas, 0, 0);
+        return;
+    }
 
     ctx.save();
     applyTransforms(ctx);
 
     // 1. Draw Image with filters
-    updateWbMatrix(state.filters);
-    ctx.filter = filterCssString(state.filters);
-    ctx.drawImage(img,0,0);
-    ctx.filter = 'none';
+    drawBaseImageOn(ctx);
 
     // 2. Draw all paths, rendered per brush style
-    state.drawings.forEach(d=>{
-        ctx.save();
-        const style = d.style || 'marker';
-        if(style === 'highlighter'){
-            ctx.globalAlpha = 0.35;
-            ctx.strokeStyle = d.color; ctx.lineWidth = d.size*2; ctx.lineCap='square'; ctx.lineJoin='round';
-            ctx.beginPath(); d.points.forEach((p,i)=> i===0? ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)); ctx.stroke();
-        } else if(style === 'pencil'){
-            ctx.globalAlpha = 0.85;
-            ctx.strokeStyle = d.color; ctx.lineWidth = Math.max(0.5, d.size*0.35); ctx.lineCap='round'; ctx.lineJoin='round';
-            ctx.beginPath(); d.points.forEach((p,i)=> i===0? ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)); ctx.stroke();
-        } else if(style === 'spray'){
-            ctx.globalAlpha = 0.55;
-            ctx.fillStyle = d.color;
-            d.points.forEach(p=>{
-                ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0.8, d.size*0.08), 0, Math.PI*2); ctx.fill();
-            });
-        } else if(style === 'calligraphy'){
-            ctx.strokeStyle = d.color; ctx.lineCap = 'round';
-            for(let i=1; i<d.points.length; i++){
-                const p0 = d.points[i-1], p1 = d.points[i];
-                const angle = Math.atan2(p1.y-p0.y, p1.x-p0.x);
-                // width varies with stroke direction relative to a fixed 45° nib, like a chisel-tip pen
-                const width = Math.max(1, d.size * (0.25 + 0.75*Math.abs(Math.cos(angle - Math.PI/4))));
-                ctx.lineWidth = width;
-                ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.stroke();
-            }
-        } else { // marker (default / original behavior)
-            ctx.strokeStyle=d.color; ctx.lineWidth=d.size; ctx.lineCap='round'; ctx.lineJoin='round';
-            ctx.beginPath(); d.points.forEach((p,i)=> i===0? ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)); ctx.stroke();
-        }
-        ctx.restore();
-    });
+    drawStrokesOn(ctx);
 
-    // 3. Draw all texts with individual rotate/skew
-    state.texts.forEach(t=>{
-        ctx.save();
-        ctx.translate(t.x, t.y);
-        ctx.rotate(t.rot * Math.PI/180);
-        ctx.transform(1,0,t.skew,1,0,0);
-        ctx.fillStyle=t.color;
-        ctx.font=`${t.size}px ${t.font}`;
-        ctx.fillText(t.txt,0,0);
-        // selection box
-        if(selectedObj === t){
-            let w = ctx.measureText(t.txt).width;
-            ctx.strokeStyle='#00ff00'; ctx.lineWidth=2;
-            ctx.strokeRect(-5,-t.size, w+10, t.size+10);
-        }
-        ctx.restore();
-    });
+    // 3. Text layering: texts flagged "behind" draw first, then -- if a
+    // subject has been detected for the current photo -- the subject cutout
+    // draws on top of them (occluding whatever part of the behind-text falls
+    // under the subject's silhouette), then normal front texts draw last.
+    // subjectCutoutForImgSrc guards against drawing a cutout that no longer
+    // matches the photo (e.g. after a crop/erase/bg-removal without re-detecting).
+    const hasValidSubjectCutout = subjectCutoutCanvas && subjectCutoutForImgSrc === img.src;
+
+    state.texts.filter(t => t.behind).forEach(t => drawTextObj(t));
+    if(hasValidSubjectCutout){
+        ctx.drawImage(subjectCutoutCanvas, 0, 0);
+    }
+    state.texts.filter(t => !t.behind).forEach(t => drawTextObj(t));
+
+    // The selected object's outline always draws last, on top of everything
+    // above (including the subject cutout), so it's visible and precisely
+    // draggable no matter which layer it's actually sitting in. If it's a
+    // "behind subject" text, also redraw its actual content here -- otherwise
+    // while adjusting one you'd see an empty box with no way to tell exactly
+    // where the text itself sits until you deselect it.
+    if(selectedObj){
+        if(selectedObj.behind) drawTextObj(selectedObj);
+        drawTextSelectionBox(selectedObj);
+    }
 
     // 4. Live eraser stroke preview -- purely visual, not committed until pointerUp
     if(mode==='erase' && erasing && eraseStrokePoints && eraseStrokePoints.length){
@@ -689,6 +956,41 @@ function render(){
             eraseStrokePoints.forEach((p,i)=> i===0? ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
             ctx.stroke();
         }
+        ctx.restore();
+    }
+
+    // 5. Document scanner corner/edge handles -- purely an overlay, drawn in
+    // content-space so it lines up with the photo at any zoom/pan/rotation.
+    // The top/bottom edges are drawn as actual curves (through tm/bm) so you
+    // can see exactly what the curve-corrected result will look like while
+    // you're still adjusting it.
+    if(mode==='scan' && scanCorners && scanCornersForImgSrc === img.src){
+        ctx.save();
+        const {tl,tr,br,bl,tm,bm} = scanCorners;
+        const topCtrl = {x: 2*tm.x - 0.5*tl.x - 0.5*tr.x, y: 2*tm.y - 0.5*tl.y - 0.5*tr.y};
+        const botCtrl = {x: 2*bm.x - 0.5*bl.x - 0.5*br.x, y: 2*bm.y - 0.5*bl.y - 0.5*br.y};
+
+        ctx.strokeStyle = '#00ff88'; ctx.lineWidth = Math.max(2, canvas.width*0.0025);
+        ctx.setLineDash([canvas.width*0.01, canvas.width*0.006]);
+        ctx.beginPath();
+        ctx.moveTo(tl.x, tl.y);
+        ctx.quadraticCurveTo(topCtrl.x, topCtrl.y, tr.x, tr.y);
+        ctx.lineTo(br.x, br.y);
+        ctx.quadraticCurveTo(botCtrl.x, botCtrl.y, bl.x, bl.y);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const hitR = scanHandleRadius();
+        Object.entries(scanCorners).forEach(([key, c]) => {
+            const isMid = (key === 'tm' || key === 'bm');
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, hitR * (isMid ? 0.4 : 0.5), 0, Math.PI*2);
+            ctx.fillStyle = draggingCornerKey===key ? '#ffcc00' : (isMid ? '#66ccff' : '#00ff88');
+            ctx.fill();
+            ctx.strokeStyle = '#000'; ctx.lineWidth = Math.max(1.5, canvas.width*0.0015);
+            ctx.stroke();
+        });
         ctx.restore();
     }
 
@@ -755,7 +1057,11 @@ function pointerDown(e){
     }
     if(mode==='text'){
         selectText(pos);
-        if(!selectedObj) addText(pos);
+        if(!selectedObj) addText(pos, false);
+    }
+    if(mode==='textBehind'){
+        selectText(pos);
+        if(!selectedObj) addText(pos, true);
     }
     if(mode==='crop'){
         const wp = getWrapCssPos(clientX, clientY);
@@ -772,6 +1078,19 @@ function pointerDown(e){
         eraseStrokePoints = [pos];
         render(); // draws the live brush-path overlay for this first point
     }
+    if(mode==='scan' && scanCorners){
+        const hitR = scanHandleRadius() * 1.6; // generous grab radius, easier to hit on touch
+        let closestKey = null, closestDist = Infinity;
+        Object.entries(scanCorners).forEach(([key, c]) => {
+            const d = Math.hypot(pos.x-c.x, pos.y-c.y);
+            if(d < hitR && d < closestDist){ closestKey = key; closestDist = d; }
+        });
+        draggingCornerKey = closestKey;
+        if(draggingCornerKey){
+            scanDragSnapshot = renderContentSpaceSnapshot(true); // cached once per drag, not rebuilt every pointermove
+            updateScanMagnifier(pos, clientX, clientY);
+        }
+    }
 }
 function pointerMove(e){
     if(mode==='draw' && drawing){
@@ -783,7 +1102,7 @@ function pointerMove(e){
         else stroke.points.push(pos);
         render();
     }
-    if(mode==='text' && selectedObj && (e.buttons || (e.touches && e.touches.length))){
+    if((mode==='text' || mode==='textBehind') && selectedObj && (e.buttons || (e.touches && e.touches.length))){
         e.preventDefault();
         const {x:clientX, y:clientY} = pointerXY(e);
         const pos = getContentPos(clientX, clientY);
@@ -816,6 +1135,14 @@ function pointerMove(e){
         eraseStrokePoints.push(getContentPos(clientX, clientY));
         render();
     }
+    if(mode==='scan' && draggingCornerKey){
+        e.preventDefault();
+        const {x:clientX, y:clientY} = pointerXY(e);
+        const pos = getContentPos(clientX, clientY);
+        scanCorners[draggingCornerKey] = pos;
+        updateScanMagnifier(pos, clientX, clientY);
+        render();
+    }
 }
 function pointerUp(){
     if(drawing){drawing=false; pushState();}
@@ -828,6 +1155,8 @@ function pointerUp(){
         else render();
     }
     cropStart = null;
+    draggingCornerKey = null;
+    hideScanMagnifier();
 }
 
 canvas.onmousedown = pointerDown;
@@ -852,24 +1181,30 @@ function selectText(pos){
             selectedObj = t; break;
         }
     }
+    if(selectedObj){
+        // reflect the selected text's own color/font in the pickers, so they
+        // show what you're about to edit rather than whatever was last used
+        document.getElementById('brushColor').value = selectedObj.color;
+        updateActivePreset(selectedObj.color);
+        document.getElementById('fontSelect').value = selectedObj.font;
+    }
     ctx.restore(); render();
 }
 
-function addText(pos){
+function addText(pos, behind){
     let txt = prompt("Enter text:");
     if(!txt) return;
-    let font = prompt("Font: Arial, Verdana, Courier, Times", "Arial");
     state.texts.push({
         txt, x:pos.x, y:pos.y, size:48,
-        font:font||'Arial', color:brush.color,
-        rot:0, skew:0
+        font: brush.font, color:brush.color,
+        rot:0, skew:0, behind: !!behind
     });
     pushState(); render();
 }
 
 // TRANSFORM SELECTED TEXT OR GLOBAL IMAGE
 function transform(type,val){
-    if(selectedObj && mode==='text'){
+    if(selectedObj && (mode==='text' || mode==='textBehind')){
         if(type==='rotate') selectedObj.rot += val;
         if(type==='skew') selectedObj.skew += val;
     } else {
@@ -891,6 +1226,99 @@ function transform(type,val){
 // (blurs rather than hallucinates) on regions it can't handle well, which
 // is an honest failure mode rather than a misleading one.
 const eraseStatus = document.getElementById('eraseStatus');
+
+// ---- Object Eraser: patch-based texture synthesis (primary), harmonic
+// diffusion (fallback for large regions) -- both on-device, no ML model. ----
+//
+// Diffusion (below) fills each masked pixel as the average of its neighbors,
+// iterated -- correct math (harmonic inpainting / discrete Laplace's
+// equation), but the result is inherently smooth/blurry: it can't invent
+// texture, only interpolate color.
+//
+// Patch-based fill instead copies small real patches from elsewhere in the
+// photo into the masked region (an onion-peel version of the technique
+// behind PatchMatch / old Content-Aware Fill) -- it can actually reproduce
+// grass, fabric, brick, skin texture, etc. instead of smearing them. It's
+// real texture synthesis, not a neural network, and it has real limits: it
+// works by finding similar-looking existing texture, so it degrades on
+// regions with no good match nearby (complex unique structures, faces) --
+// same honest "degrades gracefully, doesn't hallucinate" philosophy as before.
+//
+// It's also much more expensive per pixel than diffusion, so it's only used
+// up to a pixel-count cap; bigger erases fall back to diffusion so the
+// browser stays responsive.
+const PATCH_FILL_MAX_PIXELS = 22000;
+
+function patchBasedInpaint(imageData, w, h, maskData){
+    const px = imageData.data;
+    const mask = new Uint8Array(w*h);
+    let remaining = 0;
+    for(let i=0; i<w*h; i++){ mask[i] = maskData[i*4] > 127 ? 1 : 0; remaining += mask[i]; }
+    if(remaining === 0) return;
+
+    const knownCoords = [];
+    for(let y=0; y<h; y++) for(let x=0; x<w; x++) if(!mask[y*w+x]) knownCoords.push(x, y);
+    const knownCount = knownCoords.length / 2;
+    if(knownCount < 20) return; // essentially nothing to copy texture from -- leave as-is rather than guess
+
+    const patchRadius = 3; // 7x7 patches
+    const candidates = 40; // random known-region samples tried per target pixel
+    const inBounds = (x,y) => x>=0 && y>=0 && x<w && y<h;
+
+    let guard = w*h; // hard safety cap on passes, in case of any pathological mask shape
+    while(remaining > 0 && guard-- > 0){
+        const boundary = [];
+        for(let y=0; y<h; y++){
+            const rowBase = y*w;
+            for(let x=0; x<w; x++){
+                const idx = rowBase + x;
+                if(!mask[idx]) continue;
+                if((inBounds(x-1,y)&&!mask[idx-1]) || (inBounds(x+1,y)&&!mask[idx+1]) ||
+                   (inBounds(x,y-1)&&!mask[idx-w]) || (inBounds(x,y+1)&&!mask[idx+w])){
+                    boundary.push(x, y);
+                }
+            }
+        }
+        if(boundary.length === 0) break; // safety -- shouldn't happen while remaining>0, but never spin forever
+
+        for(let b=0; b<boundary.length; b+=2){
+            const tx = boundary[b], ty = boundary[b+1];
+            const tIdx = ty*w + tx;
+            if(!mask[tIdx]) continue;
+
+            let bestScore = Infinity, bestX = -1, bestY = -1;
+            for(let c=0; c<candidates; c++){
+                const ci = (Math.random()*knownCount|0) * 2;
+                const cx = knownCoords[ci], cy = knownCoords[ci+1];
+                if(cx-patchRadius<0 || cy-patchRadius<0 || cx+patchRadius>=w || cy+patchRadius>=h) continue;
+
+                let score = 0, samples = 0;
+                for(let dy=-patchRadius; dy<=patchRadius; dy++){
+                    for(let dx=-patchRadius; dx<=patchRadius; dx++){
+                        const sx = tx+dx, sy = ty+dy;
+                        if(!inBounds(sx,sy)) continue;
+                        const sIdx = sy*w+sx;
+                        if(mask[sIdx]) continue; // only compare against pixels we actually know
+                        const rIdx = ((cy+dy)*w + (cx+dx)) * 4, tIdx4 = sIdx*4;
+                        const dr = px[rIdx]-px[tIdx4], dg = px[rIdx+1]-px[tIdx4+1], db = px[rIdx+2]-px[tIdx4+2];
+                        score += dr*dr + dg*dg + db*db;
+                        samples++;
+                    }
+                }
+                if(samples === 0) continue;
+                score /= samples;
+                if(score < bestScore){ bestScore = score; bestX = cx; bestY = cy; }
+            }
+
+            if(bestX >= 0){
+                const srcIdx = (bestY*w+bestX)*4, dstIdx = tIdx*4;
+                px[dstIdx]=px[srcIdx]; px[dstIdx+1]=px[srcIdx+1]; px[dstIdx+2]=px[srcIdx+2];
+                mask[tIdx] = 0;
+                remaining--;
+            }
+        }
+    }
+}
 
 function inpaintRegion(imageData, w, h, maskData){
     const px = imageData.data;
@@ -957,24 +1385,152 @@ function performErase(points, brushSize){
             }
             const maskData = mctx.getImageData(bx, by, bw, bh).data;
 
-            // capture the CURRENTLY rendered pixels (includes prior drawings/
-            // filters/text already baked in), same approach as background removal
-            const srcCanvas = document.createElement('canvas');
-            srcCanvas.width = canvas.width; srcCanvas.height = canvas.height;
-            srcCanvas.getContext('2d').drawImage(canvas, 0, 0);
+            // capture pixels in CONTENT-SPACE (not the live transformed canvas --
+            // eraseStrokePoints are content-space coordinates, so sampling from
+            // the transformed canvas would silently target the wrong region
+            // whenever the view is panned/zoomed/rotated)
+            const srcCanvas = renderContentSpaceSnapshot(true);
             const sctx = srcCanvas.getContext('2d');
             const regionData = sctx.getImageData(bx, by, bw, bh);
 
-            inpaintRegion(regionData, bw, bh, maskData);
+            let maskedPixelCount = 0;
+            for(let i=0; i<maskData.length; i+=4) if(maskData[i] > 127) maskedPixelCount++;
+
+            let usedPatchFill = false;
+            if(maskedPixelCount <= PATCH_FILL_MAX_PIXELS){
+                patchBasedInpaint(regionData, bw, bh, maskData);
+                usedPatchFill = true;
+            } else {
+                inpaintRegion(regionData, bw, bh, maskData);
+            }
             sctx.putImageData(regionData, bx, by);
 
             pendingLoad = {w: canvas.width, h: canvas.height};
             img.src = srcCanvas.toDataURL();
-            eraseStatus.textContent = 'Object erased.';
+            eraseStatus.textContent = usedPatchFill
+                ? 'Object erased (texture-matched fill).'
+                : 'Object erased (large area — used the faster smooth fill to stay responsive; for a textured result, erase in smaller strokes).';
         } catch(err){
             eraseStatus.textContent = '⚠️ Erase failed: ' + err.message;
             console.error('Erase error:', err);
             render();
+        }
+    }, 20);
+}
+
+// ---- Document Scanner (perspective + curve correction) ----
+// 6 control points: the 4 corners plus a top-middle and bottom-middle handle.
+// Left/right edges stay straight lines (tl-bl, tr-br); the top and bottom
+// edges are quadratic curves that pass exactly through tm/bm -- so dragging
+// those two handles onto the actual bowed edge of an open book page (where
+// text lines curve near the spine) corrects that curve, not just the overall
+// tilt. Every horizontal row of the output is a straight blend between the
+// corresponding point on the top curve and the bottom curve -- a "ruled
+// surface" mesh warp. If you never touch tm/bm they sit on the straight
+// line between their corners, so the curve degenerates to a flat edge and
+// this behaves like an ordinary 4-point crop-and-straighten for flat
+// documents. Honest tradeoff: unlike a true projective homography, this
+// won't be pixel-perfect on a photo taken at a very steep angle of a FLAT
+// page -- but it's what actually lets it handle a curved one, which a plain
+// 4-point transform fundamentally cannot.
+function resetScanCorners(){
+    if(!canvas.classList.contains('ready')) return;
+    const mx = canvas.width * 0.1, my = canvas.height * 0.1;
+    const tl = {x: mx, y: my};
+    const tr = {x: canvas.width - mx, y: my};
+    const br = {x: canvas.width - mx, y: canvas.height - my};
+    const bl = {x: mx, y: canvas.height - my};
+    scanCorners = {
+        tl, tr, br, bl,
+        tm: {x: (tl.x+tr.x)/2, y: (tl.y+tr.y)/2}, // starts on the straight line -- drag onto the curve of the top edge
+        bm: {x: (bl.x+br.x)/2, y: (bl.y+br.y)/2}, // same for the bottom edge
+    };
+    scanCornersForImgSrc = img.src;
+    render();
+}
+
+// Quadratic Bezier that passes exactly THROUGH pMid at t=0.5 (rather than
+// merely being pulled toward it, which is what pMid would do as a standard
+// Bezier control point) -- so "drag this dot onto the curve" is literally
+// true, not an indirect relationship the user would have to compensate for.
+function quadCurveThroughMid(p0, pMid, p2, t){
+    const cx = 2*pMid.x - 0.5*p0.x - 0.5*p2.x;
+    const cy = 2*pMid.y - 0.5*p0.y - 0.5*p2.y;
+    const mt = 1-t;
+    return {
+        x: mt*mt*p0.x + 2*mt*t*cx + t*t*p2.x,
+        y: mt*mt*p0.y + 2*mt*t*cy + t*t*p2.y,
+    };
+}
+function sampleBilinear(data, srcW, srcH, x, y){
+    x = Math.max(0, Math.min(srcW - 1.001, x));
+    y = Math.max(0, Math.min(srcH - 1.001, y));
+    const x0 = Math.floor(x), y0 = Math.floor(y), x1 = x0+1, y1 = y0+1;
+    const fx = x-x0, fy = y-y0;
+    const i00=(y0*srcW+x0)*4, i10=(y0*srcW+x1)*4, i01=(y1*srcW+x0)*4, i11=(y1*srcW+x1)*4;
+    const top_r = data[i00]*(1-fx)+data[i10]*fx, bot_r = data[i01]*(1-fx)+data[i11]*fx;
+    const top_g = data[i00+1]*(1-fx)+data[i10+1]*fx, bot_g = data[i01+1]*(1-fx)+data[i11+1]*fx;
+    const top_b = data[i00+2]*(1-fx)+data[i10+2]*fx, bot_b = data[i01+2]*(1-fx)+data[i11+2]*fx;
+    return [top_r*(1-fy)+bot_r*fy, top_g*(1-fy)+bot_g*fy, top_b*(1-fy)+bot_b*fy];
+}
+
+function applyPerspectiveCorrection(){
+    if(!canvas.classList.contains('ready') || !scanCorners){
+        scanStatus.textContent = '⚠️ Load a photo first.';
+        return;
+    }
+    scanStatus.textContent = 'Straightening…';
+    setTimeout(() => {
+        try{
+            const {tl, tr, br, bl, tm, bm} = scanCorners;
+            const topLen = Math.hypot(tr.x-tl.x, tr.y-tl.y);
+            const botLen = Math.hypot(br.x-bl.x, br.y-bl.y);
+            const leftLen = Math.hypot(bl.x-tl.x, bl.y-tl.y);
+            const rightLen = Math.hypot(br.x-tr.x, br.y-tr.y);
+            let outW = Math.round((topLen + botLen) / 2);
+            let outH = Math.round((leftLen + rightLen) / 2);
+            if(outW < 10 || outH < 10){
+                scanStatus.textContent = '⚠️ Corners are too close together — spread them out to cover the document.';
+                return;
+            }
+            const SCAN_MAX_DIM = 2200; // per-pixel warp cost scales with output size, keep this responsive
+            const scaleDown = Math.min(1, SCAN_MAX_DIM / Math.max(outW, outH));
+            outW = Math.max(20, Math.round(outW * scaleDown));
+            outH = Math.max(20, Math.round(outH * scaleDown));
+
+            // source pixels in CONTENT-SPACE -- scanCorners are content-space
+            // coordinates, so sampling from the live (transformed) canvas would
+            // silently warp the wrong region whenever the view is panned,
+            // zoomed, or rotated, which is what was making this misbehave
+            const srcCanvas = renderContentSpaceSnapshot(true);
+            const srcData = srcCanvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+
+            const out = document.createElement('canvas');
+            out.width = outW; out.height = outH;
+            const octx = out.getContext('2d');
+            const outImg = octx.createImageData(outW, outH);
+            for(let dy=0; dy<outH; dy++){
+                const v = dy / (outH-1 || 1);
+                for(let dx=0; dx<outW; dx++){
+                    const u = dx / (outW-1 || 1);
+                    const topPt = quadCurveThroughMid(tl, tm, tr, u);
+                    const botPt = quadCurveThroughMid(bl, bm, br, u);
+                    const sx = topPt.x*(1-v) + botPt.x*v;
+                    const sy = topPt.y*(1-v) + botPt.y*v;
+                    const c = sampleBilinear(srcData, canvas.width, canvas.height, sx, sy);
+                    const oIdx = (dy*outW + dx) * 4;
+                    outImg.data[oIdx]=c[0]; outImg.data[oIdx+1]=c[1]; outImg.data[oIdx+2]=c[2]; outImg.data[oIdx+3]=255;
+                }
+            }
+            octx.putImageData(outImg, 0, 0);
+
+            scanCorners = null; scanCornersForImgSrc = null;
+            pendingLoad = {w: outW, h: outH};
+            img.src = out.toDataURL();
+            scanStatus.textContent = 'Cropped and straightened. Switch tools or tap Document Scanner again to fix another photo.';
+        } catch(err){
+            scanStatus.textContent = '⚠️ Straighten failed: ' + err.message;
+            console.error('Perspective correction error:', err);
         }
     }, 20);
 }
@@ -1068,9 +1624,22 @@ const btnRemoveBg = document.getElementById('btnRemoveBg');
 let bgMaskCanvas = null;     // raw grayscale mask from the model, kept separate so edge softness can be re-tuned live
 let bgSourceCanvas = null;   // the rendered pixels at the moment segmentation ran
 let bgForegroundCanvas = null; // current cutout (source + processed mask as alpha) -- rebuilt each time softness changes
+let blurPreviewActive = false;
+let blurPreviewCanvas = null; // blurred bgSourceCanvas + sharp bgForegroundCanvas on top, rebuilt live as the blur slider moves
 let bgPreviewActive = false;
 let selfieSegmentationInstance = null;
 let currentModelSelection = 0; // 0 = "general", 1 = "landscape" -- accuracy genuinely varies by photo, so we let the user flip and retry
+
+// ---- Text Behind Subject: reuses the exact same segmentation model and
+// masking/feathering pipeline as Background Removal above (ensureSegmentation,
+// buildForegroundCanvas) rather than duplicating either.
+const textBehindStatus = document.getElementById('textBehindStatus');
+const btnDetectSubject = document.getElementById('btnDetectSubject');
+let subjectMaskCanvas = null;
+let subjectSourceCanvas = null;
+let subjectCutoutCanvas = null;  // subject-only pixels (source masked+feathered), drawn on TOP of "behind" text
+let subjectCutoutForImgSrc = null; // which img.src this cutout matches -- if the photo changes (crop/erase/bg-remove/new upload) without re-detecting, we stop drawing a now-mismatched cutout rather than show something wrong
+let detectingSubject = false;
 
 function loadScript(src){
     return new Promise((resolve, reject) => {
@@ -1124,14 +1693,16 @@ function drawCheckerboard(context, w, h){
 //     the two independent of how sharp the curve itself is.
 // The user's feather slider is then applied as a final blur on top, purely
 // for the edge-softness look, decoupled from the snap quality above.
-function buildForegroundCanvas(featherPx){
+function buildForegroundCanvas(featherPx, maskCanvasArg, sourceCanvasArg){
+    const maskSrc = maskCanvasArg || bgMaskCanvas;
+    const pixelSrc = sourceCanvasArg || bgSourceCanvas;
     const w = canvas.width, h = canvas.height;
 
     const preBlurred = document.createElement('canvas');
     preBlurred.width = w; preBlurred.height = h;
     const pbctx = preBlurred.getContext('2d');
     pbctx.filter = 'blur(1.2px)';
-    pbctx.drawImage(bgMaskCanvas, 0, 0);
+    pbctx.drawImage(maskSrc, 0, 0);
     pbctx.filter = 'none';
     const rawMask = pbctx.getImageData(0, 0, w, h);
 
@@ -1159,7 +1730,7 @@ function buildForegroundCanvas(featherPx){
     const out = document.createElement('canvas');
     out.width = w; out.height = h;
     const octx = out.getContext('2d');
-    octx.drawImage(bgSourceCanvas, 0, 0);
+    octx.drawImage(pixelSrc, 0, 0);
     const srcData = octx.getImageData(0, 0, w, h);
     for(let i=0; i<srcData.data.length; i+=4){
         srcData.data[i+3] = maskData.data[i];
@@ -1215,8 +1786,9 @@ async function runBackgroundRemove(){
         updateBgPreview(); // shows the cutout over a checkerboard immediately, using the default softness
 
         bgStatus.textContent = `Subject isolated (${currentModelSelection===0?'general':'landscape'} model) — `
-            + `adjust edge softness if needed, then pick a background below. This preview stays active `
-            + `while you check other tools -- Apply a background or hit Cancel when you're done.`;
+            + `adjust edge softness, then pick a fill color, a studio backdrop, your own photo, or blur `
+            + `the original background instead (video-call style). This preview stays active while you `
+            + `check other tools -- Apply a choice or hit Cancel when you're done.`;
         document.getElementById('bgApplyRow').style.display = 'flex';
         document.getElementById('btnBgAltModel').style.display = 'inline-block';
         document.getElementById('btnBgCancel').style.display = 'inline-block';
@@ -1230,6 +1802,7 @@ async function runBackgroundRemove(){
 
 function cancelBgPreview(){
     bgPreviewActive = false;
+    blurPreviewActive = false; blurPreviewCanvas = null;
     bgForegroundCanvas = null; bgMaskCanvas = null; bgSourceCanvas = null;
     document.getElementById('bgApplyRow').style.display = 'none';
     document.getElementById('btnBgAltModel').style.display = 'none';
@@ -1238,14 +1811,76 @@ function cancelBgPreview(){
     render();
 }
 
-function retryWithOtherModel(){
+function retryWithOtherModel(forFeature){
     currentModelSelection = currentModelSelection === 0 ? 1 : 0;
     if(selfieSegmentationInstance) selfieSegmentationInstance.setOptions({modelSelection: currentModelSelection});
-    runBackgroundRemove();
+    if(forFeature === 'textBehind') detectSubjectForTextBehind();
+    else runBackgroundRemove();
 }
+
+async function detectSubjectForTextBehind(){
+    if(!canvas.classList.contains('ready')){
+        textBehindStatus.textContent = '⚠️ Load a photo first.';
+        return;
+    }
+    if(detectingSubject) return;
+    detectingSubject = true;
+    btnDetectSubject.disabled = true;
+    textBehindStatus.textContent = 'Detecting subject…';
+    try{
+        const seg = await ensureSegmentation();
+        const baseSnapshot = renderContentSpaceSnapshot(false); // photo + filters + drawings, no text -- content-space so the mask lines up correctly regardless of current pan/zoom/rotation, and keeps the model's input uncontaminated by text you may have already placed
+
+        const results = await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('Timed out waiting for the segmentation model.')), 20000);
+            seg.onResults((r) => { clearTimeout(timeout); resolve(r); });
+            seg.send({image: baseSnapshot}).catch((err) => { clearTimeout(timeout); reject(err); });
+        });
+
+        const maskCanvas = document.createElement('canvas');
+        maskCanvas.width = canvas.width; maskCanvas.height = canvas.height;
+        const mctx = maskCanvas.getContext('2d');
+        mctx.imageSmoothingEnabled = true;
+        mctx.imageSmoothingQuality = 'high';
+        mctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
+        subjectMaskCanvas = maskCanvas;
+
+        subjectSourceCanvas = baseSnapshot;
+
+        rebuildSubjectCutout();
+        subjectCutoutForImgSrc = img.src;
+
+        textBehindStatus.textContent = `Subject detected (${currentModelSelection===0?'general':'landscape'} model) — `
+            + `tap the canvas to place text; it renders behind the subject. This model is tuned for people, `
+            + `so edges are most accurate on human subjects -- for objects/animals, try the other model or `
+            + `expect softer/rougher edges. If you crop, erase, or remove the background afterward, run `
+            + `"Detect Subject" again so the cutout matches the new photo.`;
+        document.getElementById('textBehindHint').style.display = 'block';
+        render();
+    } catch(err){
+        textBehindStatus.textContent = '⚠️ Subject detection failed: ' + err.message;
+        console.error('Subject detection error:', err);
+    } finally {
+        detectingSubject = false;
+        btnDetectSubject.disabled = false;
+    }
+}
+
+function rebuildSubjectCutout(){
+    if(!subjectMaskCanvas || !subjectSourceCanvas) return;
+    const feather = Number(document.getElementById('textBehindFeather').value);
+    subjectCutoutCanvas = buildForegroundCanvas(feather, subjectMaskCanvas, subjectSourceCanvas);
+}
+document.getElementById('textBehindFeather').oninput = e => {
+    document.getElementById('textBehindFeatherVal').textContent = e.target.value + 'px';
+    if(subjectMaskCanvas){ rebuildSubjectCutout(); render(); }
+};
 
 function commitBgResult(outCanvas){
     bgPreviewActive = false;
+    blurPreviewActive = false; blurPreviewCanvas = null;
+    document.getElementById('bgBlurAmount').value = 0;
+    document.getElementById('bgBlurAmountVal').textContent = '0px';
     pendingLoad = {w: outCanvas.width, h: outCanvas.height};
     img.src = outCanvas.toDataURL();
     bgStatus.textContent = 'Background applied.';
@@ -1285,6 +1920,107 @@ document.getElementById('bgImageFile').onchange = (e) => {
     bgImg.src = URL.createObjectURL(file);
     e.target.value = '';
 };
+
+// ---- Studio backdrops (10 presets, generated on-device -- no upload, no
+// network, no stock-photo copyright question, since nothing is a real photo).
+// Modeled on common photography backdrop looks: seamless paper sweeps with a
+// soft light falloff ("vignette" type), flat chroma colors, and gradient
+// portrait backdrops.
+const STUDIO_BACKDROPS = [
+    {name:'Classic White',  type:'vignette', base:'#f5f5f5', edge:'#d6d6d6'},
+    {name:'Studio Gray',    type:'vignette', base:'#9a9a9a', edge:'#6b6b6b'},
+    {name:'Charcoal',       type:'vignette', base:'#4a4a4a', edge:'#232323'},
+    {name:'Jet Black',      type:'solid',    base:'#0a0a0a'},
+    {name:'Chroma Green',   type:'solid',    base:'#0b8a3d'},
+    {name:'Chroma Blue',    type:'solid',    base:'#0b4fa8'},
+    {name:'Warm Beige',     type:'vignette', base:'#e8dcc8', edge:'#c4b08a'},
+    {name:'Portrait Blue',  type:'gradient', from:'#87b6d9', to:'#2c4f6e'},
+    {name:'Sunset Peach',   type:'gradient', from:'#f5c99b', to:'#d97a5f'},
+    {name:'Deep Teal',      type:'gradient', from:'#3a7d7a', to:'#0f2e2c'},
+];
+
+function drawStudioBackdrop(targetCtx, w, h, preset){
+    if(preset.type === 'solid'){
+        targetCtx.fillStyle = preset.base;
+        targetCtx.fillRect(0, 0, w, h);
+    } else if(preset.type === 'gradient'){
+        const g = targetCtx.createLinearGradient(0, 0, 0, h);
+        g.addColorStop(0, preset.from);
+        g.addColorStop(1, preset.to);
+        targetCtx.fillStyle = g;
+        targetCtx.fillRect(0, 0, w, h);
+    } else { // vignette -- flat base color with a soft radial falloff toward the edges, like studio lighting on a paper sweep
+        targetCtx.fillStyle = preset.base;
+        targetCtx.fillRect(0, 0, w, h);
+        const cx = w/2, cy = h*0.42, r = Math.max(w, h) * 0.75;
+        const rg = targetCtx.createRadialGradient(cx, cy, r*0.15, cx, cy, r);
+        rg.addColorStop(0, preset.base);
+        rg.addColorStop(1, preset.edge);
+        targetCtx.fillStyle = rg;
+        targetCtx.fillRect(0, 0, w, h);
+    }
+}
+
+function cssPreviewFor(preset){
+    if(preset.type === 'solid') return preset.base;
+    if(preset.type === 'gradient') return `linear-gradient(to bottom, ${preset.from}, ${preset.to})`;
+    return `radial-gradient(circle at 50% 40%, ${preset.base}, ${preset.edge})`;
+}
+
+const studioBackdropRow = document.getElementById('studioBackdropRow');
+STUDIO_BACKDROPS.forEach((preset, i) => {
+    const el = document.createElement('div');
+    el.className = 'studio-swatch';
+    el.style.background = cssPreviewFor(preset);
+    el.title = preset.name;
+    el.onclick = () => applyStudioBackdrop(i);
+    studioBackdropRow.appendChild(el);
+});
+
+function applyStudioBackdrop(index){
+    if(!bgForegroundCanvas){ bgStatus.textContent = '⚠️ Tap "Remove Background" first.'; return; }
+    const preset = STUDIO_BACKDROPS[index];
+    const out = document.createElement('canvas');
+    out.width = canvas.width; out.height = canvas.height;
+    const octx = out.getContext('2d');
+    drawStudioBackdrop(octx, out.width, out.height, preset);
+    octx.drawImage(bgForegroundCanvas, 0, 0);
+    commitBgResult(out);
+}
+
+// ---- Background blur ("video call" style) -- keeps the ORIGINAL photo as
+// the backdrop but blurs it, with the sharp subject cutout composited on top.
+function updateBlurPreview(){
+    if(!bgForegroundCanvas || !bgSourceCanvas) return;
+    const blurPx = Number(document.getElementById('bgBlurAmount').value);
+    const out = document.createElement('canvas');
+    out.width = canvas.width; out.height = canvas.height;
+    const octx = out.getContext('2d');
+    if(blurPx > 0){
+        octx.filter = `blur(${blurPx}px)`;
+        octx.drawImage(bgSourceCanvas, 0, 0);
+        octx.filter = 'none';
+    } else {
+        octx.drawImage(bgSourceCanvas, 0, 0);
+    }
+    octx.drawImage(bgForegroundCanvas, 0, 0);
+    blurPreviewCanvas = out;
+    blurPreviewActive = true;
+    bgPreviewActive = false; // switch away from the checkerboard pick-a-background preview
+    render();
+}
+document.getElementById('bgBlurAmount').oninput = (e) => {
+    document.getElementById('bgBlurAmountVal').textContent = e.target.value + 'px';
+    if(bgForegroundCanvas) updateBlurPreview();
+};
+
+function applyBgBlur(){
+    if(!bgForegroundCanvas || !bgSourceCanvas){ bgStatus.textContent = '⚠️ Tap "Remove Background" first.'; return; }
+    updateBlurPreview();
+    const out = blurPreviewCanvas;
+    blurPreviewActive = false; blurPreviewCanvas = null;
+    commitBgResult(out);
+}
 
 // Double click / double-tap on crop button to apply crop
 document.getElementById('btnCrop').ondblclick = doCrop;

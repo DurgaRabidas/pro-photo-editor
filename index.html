@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pro Photo Editor</title>
+<title>Pro Photo Editor v2</title>
 <style>
     body {background:#121212; color:#eee; margin:0; font-family:system-ui; display:flex; flex-direction:column; height:100vh}
     h3 {text-align:center; margin:10px 0}
@@ -74,7 +74,7 @@
       values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0"/>
   </filter>
 </svg>
-<h3>📷 Pro Photo Editor</h3>
+<h3>📷 Pro Photo Editor v2</h3>
 
 <div id="wrap">
     <label for="upload" id="upload-label">📁 Choose Image</label>
@@ -255,7 +255,7 @@
         <button onclick="applyPerspectiveCorrection()">✂️ Crop &amp; Straighten</button>
         <button onclick="resetScanCorners()">↺ Reset corners</button>
     </div>
-    <div id="scanStatus">Drag the 4 green corner dots onto the corners of the tilted book/document/board. If a page is curved near the spine, also drag the 2 blue dots (top/bottom middle) onto the actual curve of the text -- then tap "Crop & Straighten" to cut out exactly the dotted area and flatten it.</div>
+    <div id="scanStatus">Tap Document Scanner and the 4 corners will be auto-detected. Nudge any dot if needed -- the 2 blue dots (top/bottom middle) bow the edge for curved book pages -- then tap Straighten.</div>
 </div>
 
 <div id="exifTools">
@@ -1433,13 +1433,121 @@ function performErase(points, brushSize){
 // won't be pixel-perfect on a photo taken at a very steep angle of a FLAT
 // page -- but it's what actually lets it handle a curved one, which a plain
 // 4-point transform fundamentally cannot.
+
+// Otsu's method: finds the gray-level threshold that best splits a
+// histogram into two classes by maximizing between-class variance. Standard,
+// well-known algorithm -- not a guess.
+function otsuThreshold(hist, total){
+    let sum = 0;
+    for(let i=0; i<256; i++) sum += i*hist[i];
+    let sumB=0, wB=0, maxVar=0, threshold=127;
+    for(let t=0; t<256; t++){
+        wB += hist[t];
+        if(wB===0) continue;
+        const wF = total - wB;
+        if(wF===0) break;
+        sumB += t*hist[t];
+        const mB = sumB/wB, mF = (sum-sumB)/wF;
+        const varBetween = wB*wF*(mB-mF)*(mB-mF);
+        if(varBetween > maxVar){ maxVar = varBetween; threshold = t; }
+    }
+    return threshold;
+}
+
+// Best-effort auto-detection of a document/board/page's corners: threshold
+// the photo into "document" vs "background" (Otsu, deciding which class is
+// background by checking which one dominates the photo's border pixels --
+// documents are usually photographed with background visible around them),
+// then for each corner direction find the document pixel that's most
+// extreme along that diagonal. This is a classical, well-understood
+// technique -- not a neural network -- and it has real limits: it needs
+// reasonable contrast between the document and what's behind it, and a
+// single dominant background tone. Cluttered desks, similarly-toned
+// backgrounds, or multiple objects in frame will fool it, which is why this
+// is always just a STARTING suggestion you can drag to fix, never a locked
+// result. Returns null (not a guess) when it isn't confident, so a bad
+// detection never silently poses as a good one.
+function detectDocumentEdges(){
+    if(!canvas.classList.contains('ready')) return null;
+    const ANALYZE_DIM = 500;
+    const scale = ANALYZE_DIM / Math.max(canvas.width, canvas.height);
+    const aw = Math.max(1, Math.round(canvas.width*scale));
+    const ah = Math.max(1, Math.round(canvas.height*scale));
+
+    const base = renderContentSpaceSnapshot(false); // photo+filters+drawings, no text/overlays to confuse detection
+    const small = document.createElement('canvas');
+    small.width = aw; small.height = ah;
+    const sctx = small.getContext('2d');
+    sctx.imageSmoothingEnabled = true; sctx.imageSmoothingQuality = 'high';
+    sctx.drawImage(base, 0, 0, aw, ah);
+    const data = sctx.getImageData(0, 0, aw, ah).data;
+
+    const gray = new Uint8ClampedArray(aw*ah);
+    const hist = new Array(256).fill(0);
+    for(let i=0, p=0; i<data.length; i+=4, p++){
+        const g = Math.round(0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2]);
+        gray[p] = g; hist[g]++;
+    }
+    const threshold = otsuThreshold(hist, aw*ah);
+
+    let lightBorder=0, darkBorder=0;
+    for(let x=0; x<aw; x++){
+        (gray[x] > threshold ? lightBorder++ : darkBorder++);
+        (gray[(ah-1)*aw+x] > threshold ? lightBorder++ : darkBorder++);
+    }
+    for(let y=0; y<ah; y++){
+        (gray[y*aw] > threshold ? lightBorder++ : darkBorder++);
+        (gray[y*aw+aw-1] > threshold ? lightBorder++ : darkBorder++);
+    }
+    const backgroundIsLight = lightBorder >= darkBorder;
+
+    let best = {
+        tl:{score:-Infinity,x:0,y:0}, tr:{score:-Infinity,x:0,y:0},
+        br:{score:-Infinity,x:0,y:0}, bl:{score:-Infinity,x:0,y:0},
+    };
+    let docPixelCount = 0;
+    for(let y=0; y<ah; y++){
+        for(let x=0; x<aw; x++){
+            const isLight = gray[y*aw+x] > threshold;
+            if((backgroundIsLight && isLight) || (!backgroundIsLight && !isLight)) continue; // background pixel, skip
+            docPixelCount++;
+            const sTL = -(x+y); if(sTL > best.tl.score) best.tl = {score:sTL,x,y};
+            const sTR = (x-y);  if(sTR > best.tr.score) best.tr = {score:sTR,x,y};
+            const sBR = (x+y);  if(sBR > best.br.score) best.br = {score:sBR,x,y};
+            const sBL = (y-x);  if(sBL > best.bl.score) best.bl = {score:sBL,x,y};
+        }
+    }
+
+    if(docPixelCount < aw*ah*0.05) return null; // too little contrast/document area to trust
+
+    const toFull = (p) => ({x: p.x/scale, y: p.y/scale});
+    const corners = {tl: toFull(best.tl), tr: toFull(best.tr), br: toFull(best.br), bl: toFull(best.bl)};
+
+    const wSpan = Math.hypot(corners.tr.x-corners.tl.x, corners.tr.y-corners.tl.y);
+    const hSpan = Math.hypot(corners.bl.x-corners.tl.x, corners.bl.y-corners.tl.y);
+    if(wSpan < canvas.width*0.2 || hSpan < canvas.height*0.2) return null; // implausibly small/degenerate
+
+    return corners;
+}
+
 function resetScanCorners(){
     if(!canvas.classList.contains('ready')) return;
-    const mx = canvas.width * 0.1, my = canvas.height * 0.1;
-    const tl = {x: mx, y: my};
-    const tr = {x: canvas.width - mx, y: my};
-    const br = {x: canvas.width - mx, y: canvas.height - my};
-    const bl = {x: mx, y: canvas.height - my};
+    const detected = detectDocumentEdges();
+    let tl, tr, br, bl;
+    if(detected){
+        ({tl, tr, br, bl} = detected);
+        scanStatus.textContent = 'Edges auto-detected — check they look right and nudge any dot if needed, '
+            + 'then tap Straighten. (Automatic guess based on contrast with the background; not always '
+            + 'perfect on busy or low-contrast scenes.)';
+    } else {
+        const mx = canvas.width * 0.1, my = canvas.height * 0.1;
+        tl = {x: mx, y: my};
+        tr = {x: canvas.width - mx, y: my};
+        br = {x: canvas.width - mx, y: canvas.height - my};
+        bl = {x: mx, y: canvas.height - my};
+        scanStatus.textContent = "Couldn't confidently auto-detect the document's edges (try a plainer "
+            + 'background next time) — drag the 4 green dots onto its corners manually.';
+    }
     scanCorners = {
         tl, tr, br, bl,
         tm: {x: (tl.x+tr.x)/2, y: (tl.y+tr.y)/2}, // starts on the straight line -- drag onto the curve of the top edge

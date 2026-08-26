@@ -1454,19 +1454,100 @@ function otsuThreshold(hist, total){
     return threshold;
 }
 
-// Best-effort auto-detection of a document/board/page's corners: threshold
-// the photo into "document" vs "background" (Otsu, deciding which class is
-// background by checking which one dominates the photo's border pixels --
-// documents are usually photographed with background visible around them),
-// then for each corner direction find the document pixel that's most
-// extreme along that diagonal. This is a classical, well-understood
-// technique -- not a neural network -- and it has real limits: it needs
-// reasonable contrast between the document and what's behind it, and a
-// single dominant background tone. Cluttered desks, similarly-toned
-// backgrounds, or multiple objects in frame will fool it, which is why this
-// is always just a STARTING suggestion you can drag to fix, never a locked
-// result. Returns null (not a guess) when it isn't confident, so a bad
-// detection never silently poses as a good one.
+// Fast separable box blur (sliding-window sum, O(w*h) regardless of radius).
+// Applied before thresholding specifically to wash out fine internal detail
+// -- text lines, ruling, small graphics -- while preserving the much
+// larger-scale brightness difference between "page" and "background". Text
+// is high-frequency (thin strokes), the page-vs-background boundary is
+// low-frequency (one big region vs another); blurring is what actually
+// separates those two things, not just noise reduction.
+function boxBlurGray(gray, w, h, radius){
+    const tmp = new Float32Array(w*h);
+    const out = new Uint8ClampedArray(w*h);
+    const norm = 1/(radius*2+1);
+    for(let y=0; y<h; y++){
+        const row = y*w;
+        let sum = 0;
+        for(let x=-radius; x<=radius; x++) sum += gray[row + Math.min(w-1, Math.max(0,x))];
+        for(let x=0; x<w; x++){
+            tmp[row+x] = sum*norm;
+            const addX = Math.min(w-1, x+radius+1), remX = Math.max(0, x-radius);
+            sum += gray[row+addX] - gray[row+remX];
+        }
+    }
+    for(let x=0; x<w; x++){
+        let sum = 0;
+        for(let y=-radius; y<=radius; y++) sum += tmp[Math.min(h-1, Math.max(0,y))*w + x];
+        for(let y=0; y<h; y++){
+            out[y*w+x] = Math.round(sum*norm);
+            const addY = Math.min(h-1, y+radius+1), remY = Math.max(0, y-radius);
+            sum += tmp[addY*w+x] - tmp[remY*w+x];
+        }
+    }
+    return out;
+}
+
+// Robust corner estimate: instead of trusting the single most extreme pixel
+// (which one stray dark spot, shadow, or finger can hijack), average the
+// TOP slice of extreme pixels along that diagonal direction. A handful of
+// outliers get diluted into an average of dozens-to-hundreds of points.
+function robustCorner(scored){
+    if(scored.length === 0) return null;
+    scored.sort((a,b) => b.score-a.score);
+    const topN = Math.max(15, Math.round(scored.length*0.01));
+    const top = scored.slice(0, topN);
+    let sx=0, sy=0;
+    top.forEach(p => { sx+=p.x; sy+=p.y; });
+    return {x: sx/top.length, y: sy/top.length};
+}
+
+// Sobel gradient magnitude -- how strong an edge each pixel sits on,
+// regardless of which side is "lighter". /4 rescales into a roughly
+// 0-255-ish range since the Sobel kernel coefficients sum to 4.
+function sobelMagnitude(gray, w, h){
+    const mag = new Float32Array(w*h);
+    for(let y=1; y<h-1; y++){
+        for(let x=1; x<w-1; x++){
+            const i = y*w+x;
+            const gx = -gray[i-w-1] - 2*gray[i-1] - gray[i+w-1] + gray[i-w+1] + 2*gray[i+1] + gray[i+w+1];
+            const gy = -gray[i-w-1] - 2*gray[i-w] - gray[i-w+1] + gray[i+w-1] + 2*gray[i+w] + gray[i+w+1];
+            mag[i] = Math.sqrt(gx*gx + gy*gy) / 4;
+        }
+    }
+    return mag;
+}
+
+// True convexity check (consecutive cross-products all the same sign) --
+// rejects a self-intersecting/bowtie quad outright rather than silently
+// warping the photo into something nonsensical.
+function isConvexQuad(tl, tr, br, bl){
+    const pts = [tl, tr, br, bl];
+    const cross = (o,a,b) => (a.x-o.x)*(b.y-o.y) - (a.y-o.y)*(b.x-o.x);
+    let signs = [];
+    for(let i=0; i<4; i++){
+        signs.push(Math.sign(cross(pts[i], pts[(i+1)%4], pts[(i+2)%4])));
+    }
+    return signs.every(s => s === signs[0]) && signs[0] !== 0;
+}
+
+// Best-effort auto-detection of a document/board/page's corners: grayscale
+// -> Sobel edge magnitude -> Otsu-threshold the edge strength (not the raw
+// brightness) into a strong-edge mask -> split the photo into 4 generously
+// overlapping corner regions -> within each, robustly average the top
+// extreme-scoring EDGE pixels (not all "document-colored" pixels) -> check
+// the resulting quad is actually convex before trusting it.
+//
+// This deliberately only trusts pixels that sit on a genuine edge, rather
+// than classifying whole regions by brightness/color. That matters because
+// a textured background (wood grain, fabric) can have patches as bright as
+// the actual page, which fools brightness-region classification into
+// annexing them -- but those patches usually don't form a strong edge all
+// the way out to where the true corner is, so this approach is measurably
+// less likely to get dragged outward by them. It has real limits: it still
+// needs the document's actual boundary to be a genuinely stronger edge than
+// whatever else is in each corner region, and a cluttered, high-texture
+// scene can still beat it. Returns null (not a guess) when it isn't
+// confident, so a bad detection never silently poses as a good one.
 function detectDocumentEdges(){
     if(!canvas.classList.contains('ready')) return null;
     const ANALYZE_DIM = 500;
@@ -1482,46 +1563,48 @@ function detectDocumentEdges(){
     sctx.drawImage(base, 0, 0, aw, ah);
     const data = sctx.getImageData(0, 0, aw, ah).data;
 
-    const gray = new Uint8ClampedArray(aw*ah);
-    const hist = new Array(256).fill(0);
+    let gray = new Uint8ClampedArray(aw*ah);
     for(let i=0, p=0; i<data.length; i+=4, p++){
-        const g = Math.round(0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2]);
-        gray[p] = g; hist[g]++;
+        gray[p] = Math.round(0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2]);
     }
+    gray = boxBlurGray(gray, aw, ah, 1); // light denoise only, before edge detection
+
+    const mag = sobelMagnitude(gray, aw, ah);
+    const magClamped = new Uint8ClampedArray(aw*ah);
+    const hist = new Array(256).fill(0);
+    for(let p=0; p<aw*ah; p++){ magClamped[p] = Math.min(255, Math.round(mag[p])); hist[magClamped[p]]++; }
     const threshold = otsuThreshold(hist, aw*ah);
 
-    let lightBorder=0, darkBorder=0;
-    for(let x=0; x<aw; x++){
-        (gray[x] > threshold ? lightBorder++ : darkBorder++);
-        (gray[(ah-1)*aw+x] > threshold ? lightBorder++ : darkBorder++);
-    }
-    for(let y=0; y<ah; y++){
-        (gray[y*aw] > threshold ? lightBorder++ : darkBorder++);
-        (gray[y*aw+aw-1] > threshold ? lightBorder++ : darkBorder++);
-    }
-    const backgroundIsLight = lightBorder >= darkBorder;
+    // generously overlapping corner regions -- outer 70% of each dimension
+    // from that corner -- so a candidate doesn't have to be exactly in a
+    // strict quadrant to count
+    const inTL = (x,y) => x < aw*0.7 && y < ah*0.7;
+    const inTR = (x,y) => x > aw*0.3 && y < ah*0.7;
+    const inBR = (x,y) => x > aw*0.3 && y > ah*0.3;
+    const inBL = (x,y) => x < aw*0.7 && y > ah*0.3;
 
-    let best = {
-        tl:{score:-Infinity,x:0,y:0}, tr:{score:-Infinity,x:0,y:0},
-        br:{score:-Infinity,x:0,y:0}, bl:{score:-Infinity,x:0,y:0},
-    };
-    let docPixelCount = 0;
-    for(let y=0; y<ah; y++){
-        for(let x=0; x<aw; x++){
-            const isLight = gray[y*aw+x] > threshold;
-            if((backgroundIsLight && isLight) || (!backgroundIsLight && !isLight)) continue; // background pixel, skip
-            docPixelCount++;
-            const sTL = -(x+y); if(sTL > best.tl.score) best.tl = {score:sTL,x,y};
-            const sTR = (x-y);  if(sTR > best.tr.score) best.tr = {score:sTR,x,y};
-            const sBR = (x+y);  if(sBR > best.br.score) best.br = {score:sBR,x,y};
-            const sBL = (y-x);  if(sBL > best.bl.score) best.bl = {score:sBL,x,y};
+    const scoredTL=[], scoredTR=[], scoredBR=[], scoredBL=[];
+    let edgePixelCount = 0;
+    for(let y=1; y<ah-1; y++){
+        for(let x=1; x<aw-1; x++){
+            if(magClamped[y*aw+x] <= threshold) continue; // not a strong-enough edge, skip
+            edgePixelCount++;
+            if(inTL(x,y)) scoredTL.push({score: -(x+y), x, y});
+            if(inTR(x,y)) scoredTR.push({score: (x-y), x, y});
+            if(inBR(x,y)) scoredBR.push({score: (x+y), x, y});
+            if(inBL(x,y)) scoredBL.push({score: (y-x), x, y});
         }
     }
 
-    if(docPixelCount < aw*ah*0.05) return null; // too little contrast/document area to trust
+    if(edgePixelCount < aw*ah*0.005) return null; // essentially no edges found, nothing to trust
+
+    const tlR = robustCorner(scoredTL), trR = robustCorner(scoredTR);
+    const brR = robustCorner(scoredBR), blR = robustCorner(scoredBL);
+    if(!tlR || !trR || !brR || !blR) return null;
+    if(!isConvexQuad(tlR, trR, brR, blR)) return null; // self-intersecting/bowtie result, don't trust it
 
     const toFull = (p) => ({x: p.x/scale, y: p.y/scale});
-    const corners = {tl: toFull(best.tl), tr: toFull(best.tr), br: toFull(best.br), bl: toFull(best.bl)};
+    const corners = {tl: toFull(tlR), tr: toFull(trR), br: toFull(brR), bl: toFull(blR)};
 
     const wSpan = Math.hypot(corners.tr.x-corners.tl.x, corners.tr.y-corners.tl.y);
     const hSpan = Math.hypot(corners.bl.x-corners.tl.x, corners.bl.y-corners.tl.y);
@@ -1537,8 +1620,8 @@ function resetScanCorners(){
     if(detected){
         ({tl, tr, br, bl} = detected);
         scanStatus.textContent = 'Edges auto-detected — check they look right and nudge any dot if needed, '
-            + 'then tap Straighten. (Automatic guess based on contrast with the background; not always '
-            + 'perfect on busy or low-contrast scenes.)';
+            + 'then tap Straighten. (Finds the strongest boundary lines, not just brightness -- still a '
+            + 'starting guess, not always perfect on cluttered or very low-contrast scenes.)';
     } else {
         const mx = canvas.width * 0.1, my = canvas.height * 0.1;
         tl = {x: mx, y: my};
@@ -1937,7 +2020,7 @@ async function detectSubjectForTextBehind(){
     textBehindStatus.textContent = 'Detecting subject…';
     try{
         const seg = await ensureSegmentation();
-        const baseSnapshot = renderContentSpaceSnapshot(false); // photo + filters + drawings, no text -- content-space so the mask lines up correctly regardless of current pan/zoom/rotation, and keeps the model's input uncontaminated by text you may have already placed
+        const baseSnapshot = renderContentSpaceSnapshot(false); // photo + filters + drawings, no text -- content-space
 
         const results = await new Promise((resolve, reject) => {
             const timeout = setTimeout(() => reject(new Error('Timed out waiting for the segmentation model.')), 20000);
@@ -1952,17 +2035,15 @@ async function detectSubjectForTextBehind(){
         mctx.imageSmoothingQuality = 'high';
         mctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
         subjectMaskCanvas = maskCanvas;
-
         subjectSourceCanvas = baseSnapshot;
-
-        rebuildSubjectCutout();
         subjectCutoutForImgSrc = img.src;
 
-        textBehindStatus.textContent = `Subject detected (${currentModelSelection===0?'general':'landscape'} model) — `
-            + `tap the canvas to place text; it renders behind the subject. This model is tuned for people, `
-            + `so edges are most accurate on human subjects -- for objects/animals, try the other model or `
-            + `expect softer/rougher edges. If you crop, erase, or remove the background afterward, run `
-            + `"Detect Subject" again so the cutout matches the new photo.`;
+        const feather = Number(document.getElementById('textBehindFeather').value);
+        subjectCutoutCanvas = buildForegroundCanvas(feather, subjectMaskCanvas, subjectSourceCanvas);
+
+        textBehindStatus.textContent = `Subject detected (${currentModelSelection===0?'general':'landscape'} model). `
+            + `Tap anywhere on the canvas to place text — it'll automatically slide behind the subject silhouette. `
+            + `Use the slider above to tweak edge softness if needed.`;
         document.getElementById('textBehindHint').style.display = 'block';
         render();
     } catch(err){
@@ -1974,299 +2055,334 @@ async function detectSubjectForTextBehind(){
     }
 }
 
-function rebuildSubjectCutout(){
-    if(!subjectMaskCanvas || !subjectSourceCanvas) return;
+document.getElementById('textBehindFeather').oninput = () => {
     const feather = Number(document.getElementById('textBehindFeather').value);
-    subjectCutoutCanvas = buildForegroundCanvas(feather, subjectMaskCanvas, subjectSourceCanvas);
-}
-document.getElementById('textBehindFeather').oninput = e => {
-    document.getElementById('textBehindFeatherVal').textContent = e.target.value + 'px';
-    if(subjectMaskCanvas){ rebuildSubjectCutout(); render(); }
+    document.getElementById('textBehindFeatherVal').textContent = feather + 'px';
+    if(subjectMaskCanvas && subjectSourceCanvas){
+        subjectCutoutCanvas = buildForegroundCanvas(feather, subjectMaskCanvas, subjectSourceCanvas);
+        render();
+    }
 };
 
-function commitBgResult(outCanvas){
+function commitBgResult(compositedCanvas, desc){
     bgPreviewActive = false;
     blurPreviewActive = false; blurPreviewCanvas = null;
-    document.getElementById('bgBlurAmount').value = 0;
-    document.getElementById('bgBlurAmountVal').textContent = '0px';
-    pendingLoad = {w: outCanvas.width, h: outCanvas.height};
-    img.src = outCanvas.toDataURL();
-    bgStatus.textContent = 'Background applied.';
+    bgForegroundCanvas = null; bgMaskCanvas = null; bgSourceCanvas = null;
     document.getElementById('bgApplyRow').style.display = 'none';
     document.getElementById('btnBgAltModel').style.display = 'none';
     document.getElementById('btnBgCancel').style.display = 'none';
-    bgForegroundCanvas = null; bgMaskCanvas = null; bgSourceCanvas = null;
+
+    pendingLoad = {w: compositedCanvas.width, h: compositedCanvas.height};
+    img.src = compositedCanvas.toDataURL();
+    bgStatus.textContent = desc;
 }
 
 function applyBgColor(){
-    if(!bgForegroundCanvas){ bgStatus.textContent = '⚠️ Tap "Remove Background" first.'; return; }
+    if(!bgForegroundCanvas) return;
     const color = document.getElementById('bgColor').value;
     const out = document.createElement('canvas');
     out.width = canvas.width; out.height = canvas.height;
     const octx = out.getContext('2d');
-    octx.fillStyle = color; octx.fillRect(0, 0, out.width, out.height);
+    octx.fillStyle = color;
+    octx.fillRect(0, 0, out.width, out.height);
     octx.drawImage(bgForegroundCanvas, 0, 0);
-    commitBgResult(out);
+    commitBgResult(out, `Background replaced with solid color (${color}).`);
 }
 
-document.getElementById('bgImageFile').onchange = (e) => {
-    if(!bgForegroundCanvas){ bgStatus.textContent = '⚠️ Tap "Remove Background" first.'; e.target.value=''; return; }
-    const file = e.target.files[0]; if(!file) return;
-    const bgImg = new Image();
-    bgImg.onload = () => {
-        const out = document.createElement('canvas');
-        out.width = canvas.width; out.height = canvas.height;
-        const octx = out.getContext('2d');
-        // cover-fit the chosen photo behind the subject
-        const scale = Math.max(out.width/bgImg.width, out.height/bgImg.height);
-        const dw = bgImg.width*scale, dh = bgImg.height*scale;
-        octx.drawImage(bgImg, (out.width-dw)/2, (out.height-dh)/2, dw, dh);
-        octx.drawImage(bgForegroundCanvas, 0, 0);
-        commitBgResult(out);
-    };
-    bgImg.onerror = () => { bgStatus.textContent = '⚠️ Could not load that image file.'; };
-    bgImg.src = URL.createObjectURL(file);
-    e.target.value = '';
-};
-
-// ---- Studio backdrops (10 presets, generated on-device -- no upload, no
-// network, no stock-photo copyright question, since nothing is a real photo).
-// Modeled on common photography backdrop looks: seamless paper sweeps with a
-// soft light falloff ("vignette" type), flat chroma colors, and gradient
-// portrait backdrops.
-const STUDIO_BACKDROPS = [
-    {name:'Classic White',  type:'vignette', base:'#f5f5f5', edge:'#d6d6d6'},
-    {name:'Studio Gray',    type:'vignette', base:'#9a9a9a', edge:'#6b6b6b'},
-    {name:'Charcoal',       type:'vignette', base:'#4a4a4a', edge:'#232323'},
-    {name:'Jet Black',      type:'solid',    base:'#0a0a0a'},
-    {name:'Chroma Green',   type:'solid',    base:'#0b8a3d'},
-    {name:'Chroma Blue',    type:'solid',    base:'#0b4fa8'},
-    {name:'Warm Beige',     type:'vignette', base:'#e8dcc8', edge:'#c4b08a'},
-    {name:'Portrait Blue',  type:'gradient', from:'#87b6d9', to:'#2c4f6e'},
-    {name:'Sunset Peach',   type:'gradient', from:'#f5c99b', to:'#d97a5f'},
-    {name:'Deep Teal',      type:'gradient', from:'#3a7d7a', to:'#0f2e2c'},
-];
-
-function drawStudioBackdrop(targetCtx, w, h, preset){
-    if(preset.type === 'solid'){
-        targetCtx.fillStyle = preset.base;
-        targetCtx.fillRect(0, 0, w, h);
-    } else if(preset.type === 'gradient'){
-        const g = targetCtx.createLinearGradient(0, 0, 0, h);
-        g.addColorStop(0, preset.from);
-        g.addColorStop(1, preset.to);
-        targetCtx.fillStyle = g;
-        targetCtx.fillRect(0, 0, w, h);
-    } else { // vignette -- flat base color with a soft radial falloff toward the edges, like studio lighting on a paper sweep
-        targetCtx.fillStyle = preset.base;
-        targetCtx.fillRect(0, 0, w, h);
-        const cx = w/2, cy = h*0.42, r = Math.max(w, h) * 0.75;
-        const rg = targetCtx.createRadialGradient(cx, cy, r*0.15, cx, cy, r);
-        rg.addColorStop(0, preset.base);
-        rg.addColorStop(1, preset.edge);
-        targetCtx.fillStyle = rg;
-        targetCtx.fillRect(0, 0, w, h);
-    }
-}
-
-function cssPreviewFor(preset){
-    if(preset.type === 'solid') return preset.base;
-    if(preset.type === 'gradient') return `linear-gradient(to bottom, ${preset.from}, ${preset.to})`;
-    return `radial-gradient(circle at 50% 40%, ${preset.base}, ${preset.edge})`;
-}
-
-const studioBackdropRow = document.getElementById('studioBackdropRow');
-STUDIO_BACKDROPS.forEach((preset, i) => {
-    const el = document.createElement('div');
-    el.className = 'studio-swatch';
-    el.style.background = cssPreviewFor(preset);
-    el.title = preset.name;
-    el.onclick = () => applyStudioBackdrop(i);
-    studioBackdropRow.appendChild(el);
-});
-
-function applyStudioBackdrop(index){
-    if(!bgForegroundCanvas){ bgStatus.textContent = '⚠️ Tap "Remove Background" first.'; return; }
-    const preset = STUDIO_BACKDROPS[index];
-    const out = document.createElement('canvas');
-    out.width = canvas.width; out.height = canvas.height;
-    const octx = out.getContext('2d');
-    drawStudioBackdrop(octx, out.width, out.height, preset);
-    octx.drawImage(bgForegroundCanvas, 0, 0);
-    commitBgResult(out);
-}
-
-// ---- Background blur ("video call" style) -- keeps the ORIGINAL photo as
-// the backdrop but blurs it, with the sharp subject cutout composited on top.
-function updateBlurPreview(){
-    if(!bgForegroundCanvas || !bgSourceCanvas) return;
+document.getElementById('bgBlurAmount').oninput = () => {
     const blurPx = Number(document.getElementById('bgBlurAmount').value);
-    const out = document.createElement('canvas');
-    out.width = canvas.width; out.height = canvas.height;
-    const octx = out.getContext('2d');
-    if(blurPx > 0){
-        octx.filter = `blur(${blurPx}px)`;
-        octx.drawImage(bgSourceCanvas, 0, 0);
-        octx.filter = 'none';
-    } else {
-        octx.drawImage(bgSourceCanvas, 0, 0);
+    document.getElementById('bgBlurAmountVal').textContent = blurPx + 'px';
+    if(!bgForegroundCanvas || !bgSourceCanvas) return;
+
+    if(blurPx === 0){
+        blurPreviewActive = false;
+        blurPreviewCanvas = null;
+        updateBgPreview(); // back to checkerboard preview
+        return;
     }
-    octx.drawImage(bgForegroundCanvas, 0, 0);
-    blurPreviewCanvas = out;
+
+    const preview = document.createElement('canvas');
+    preview.width = canvas.width; preview.height = canvas.height;
+    const pctx = preview.getContext('2d');
+    pctx.filter = `blur(${blurPx}px)`;
+    pctx.drawImage(bgSourceCanvas, 0, 0);
+    pctx.filter = 'none';
+    pctx.drawImage(bgForegroundCanvas, 0, 0);
+
+    blurPreviewCanvas = preview;
     blurPreviewActive = true;
-    bgPreviewActive = false; // switch away from the checkerboard pick-a-background preview
+    bgPreviewActive = false;
     render();
-}
-document.getElementById('bgBlurAmount').oninput = (e) => {
-    document.getElementById('bgBlurAmountVal').textContent = e.target.value + 'px';
-    if(bgForegroundCanvas) updateBlurPreview();
 };
 
 function applyBgBlur(){
-    if(!bgForegroundCanvas || !bgSourceCanvas){ bgStatus.textContent = '⚠️ Tap "Remove Background" first.'; return; }
-    updateBlurPreview();
-    const out = blurPreviewCanvas;
-    blurPreviewActive = false; blurPreviewCanvas = null;
-    commitBgResult(out);
+    if(!bgForegroundCanvas || !bgSourceCanvas) return;
+    const blurPx = Number(document.getElementById('bgBlurAmount').value);
+    if(blurPx === 0){
+        bgStatus.textContent = 'Slide the blur amount above 0px first.';
+        return;
+    }
+    const out = document.createElement('canvas');
+    out.width = canvas.width; out.height = canvas.height;
+    const octx = out.getContext('2d');
+    octx.filter = `blur(${blurPx}px)`;
+    octx.drawImage(bgSourceCanvas, 0, 0);
+    octx.filter = 'none';
+    octx.drawImage(bgForegroundCanvas, 0, 0);
+    commitBgResult(out, `Background blurred (${blurPx}px).`);
 }
 
-// Double click / double-tap on crop button to apply crop
-document.getElementById('btnCrop').ondblclick = doCrop;
-let lastCropTap = 0;
-document.getElementById('btnCrop').addEventListener('touchend', ()=>{
-    const now = Date.now();
-    if(now - lastCropTap < 350) doCrop();
-    lastCropTap = now;
-});
-
-// ---- EXIF viewer + remover ----
-// Parses the raw JPEG bytes ourselves (no library) to read Make/Model/date/
-// GPS location, purely for display -- this data is read, never sent anywhere.
-// The "remover" part is really just a fact worth stating clearly: canvas.
-// toDataURL() (used by Save) re-encodes pixels from scratch and never
-// carries EXIF over, so anything exported from this editor is already
-// metadata-free automatically. This panel exists so you can *see* what was
-// in the original file before that happens.
-const exifContent = document.getElementById('exifContent');
-const EXIF_TAG_NAMES = {
-    0x010F: 'Camera make', 0x0110: 'Camera model', 0x0112: 'Orientation',
-    0x0132: 'File date/time', 0x9003: 'Date taken',
-    0x829A: 'Exposure time', 0x829D: 'F-number', 0x8827: 'ISO', 0x920A: 'Focal length'
+document.getElementById('bgImageFile').onchange = (e) => {
+    const file = e.target.files[0];
+    if(!file || !bgForegroundCanvas) return;
+    const userBg = new Image();
+    userBg.onload = () => {
+        const out = document.createElement('canvas');
+        out.width = canvas.width; out.height = canvas.height;
+        const octx = out.getContext('2d');
+        // cover fit: scale up to fill completely, centered
+        const s = Math.max(out.width / userBg.width, out.height / userBg.height);
+        const dw = userBg.width * s, dh = userBg.height * s;
+        const dx = (out.width - dw)/2, dy = (out.height - dh)/2;
+        octx.drawImage(userBg, dx, dy, dw, dh);
+        octx.drawImage(bgForegroundCanvas, 0, 0);
+        commitBgResult(out, 'Background replaced with chosen photo.');
+    };
+    userBg.src = URL.createObjectURL(file);
 };
 
-function getRational(view, offset, little){
-    const num = view.getUint32(offset, little), den = view.getUint32(offset+4, little);
-    return den !== 0 ? num/den : 0;
-}
+// Studio backdrops generated programmatically on canvas (gradients, studio
+// lights, textures) -- instant, zero-byte download, no network needed.
+const STUDIO_BACKDROPS = [
+    {name:'Clean White', draw:(c,w,h)=>{ c.fillStyle='#ffffff'; c.fillRect(0,0,w,h); }},
+    {name:'Studio Gray', draw:(c,w,h)=>{ const g=c.createRadialGradient(w/2,h/2,10,w/2,h/2,Math.max(w,h)*0.7); g.addColorStop(0,'#e0e0e0'); g.addColorStop(1,'#888888'); c.fillStyle=g; c.fillRect(0,0,w,h); }},
+    {name:'Dark Vignette', draw:(c,w,h)=>{ const g=c.createRadialGradient(w/2,h/2,10,w/2,h/2,Math.max(w,h)*0.75); g.addColorStop(0,'#3a3a3a'); g.addColorStop(1,'#111111'); c.fillStyle=g; c.fillRect(0,0,w,h); }},
+    {name:'Warm Spotlight', draw:(c,w,h)=>{ const g=c.createRadialGradient(w*0.35,h*0.35,10,w*0.5,h*0.5,Math.max(w,h)*0.8); g.addColorStop(0,'#fff4e0'); g.addColorStop(0.5,'#e0a868'); g.addColorStop(1,'#3a2010'); c.fillStyle=g; c.fillRect(0,0,w,h); }},
+    {name:'Cool Cyan', draw:(c,w,h)=>{ const g=c.createLinearGradient(0,0,w,h); g.addColorStop(0,'#003344'); g.addColorStop(1,'#00111a'); c.fillStyle=g; c.fillRect(0,0,w,h); }},
+    {name:'Neon Gradient', draw:(c,w,h)=>{ const g=c.createLinearGradient(0,0,w,h); g.addColorStop(0,'#8a2387'); g.addColorStop(0.5,'#e94057'); g.addColorStop(1,'#f27121'); c.fillStyle=g; c.fillRect(0,0,w,h); }},
+    {name:'Soft Pastel', draw:(c,w,h)=>{ const g=c.createLinearGradient(0,0,0,h); g.addColorStop(0,'#a8c0ff'); g.addColorStop(1,'#3f2b96'); c.fillStyle=g; c.fillRect(0,0,w,h); }},
+    {name:'Pro Portrait', draw:(c,w,h)=>{ const g=c.createRadialGradient(w*0.5,h*0.4,20,w*0.5,h*0.5,Math.max(w,h)*0.7); g.addColorStop(0,'#505050'); g.addColorStop(1,'#1a1a1a'); c.fillStyle=g; c.fillRect(0,0,w,h); }}
+];
 
-function readIFD(view, tiffStart, ifdOffset, little){
-    const entries = {};
-    const numEntries = view.getUint16(tiffStart+ifdOffset, little);
-    for(let i=0; i<numEntries; i++){
-        const entryOffset = tiffStart+ifdOffset+2+i*12;
-        const tag = view.getUint16(entryOffset, little);
-        const type = view.getUint16(entryOffset+2, little);
-        const count = view.getUint32(entryOffset+4, little);
-        const typeSizes = {1:1,2:1,3:2,4:4,5:8,7:1,9:4,10:8};
-        const size = (typeSizes[type]||1) * count;
-        const valueFieldOffset = entryOffset+8;
-        const dataOffset = size <= 4 ? valueFieldOffset : tiffStart + view.getUint32(valueFieldOffset, little);
+const studioRow = document.getElementById('studioBackdropRow');
+STUDIO_BACKDROPS.forEach(bd => {
+    const swatch = document.createElement('div');
+    swatch.className = 'studio-swatch';
+    const thumb = document.createElement('canvas');
+    thumb.width = 52; thumb.height = 52;
+    bd.draw(thumb.getContext('2d'), 52, 52);
+    swatch.style.backgroundImage = `url(${thumb.toDataURL()})`;
+    const label = document.createElement('span');
+    label.textContent = bd.name;
+    swatch.appendChild(label);
+    swatch.onclick = () => {
+        if(!bgForegroundCanvas) return;
+        const out = document.createElement('canvas');
+        out.width = canvas.width; out.height = canvas.height;
+        bd.draw(out.getContext('2d'), out.width, out.height);
+        out.getContext('2d').drawImage(bgForegroundCanvas, 0, 0);
+        commitBgResult(out, `Background replaced with studio backdrop (${bd.name}).`);
+    };
+    studioRow.appendChild(swatch);
+});
 
-        let value = null;
-        if(type === 2){ // ASCII
-            let str = '';
-            for(let j=0; j<count-1; j++) str += String.fromCharCode(view.getUint8(dataOffset+j));
-            value = str;
-        } else if(type === 3){ value = view.getUint16(dataOffset, little); }
-        else if(type === 4){ value = view.getUint32(dataOffset, little); }
-        else if(type === 5){ value = getRational(view, dataOffset, little); }
-        entries[tag] = {value, dataOffset, count, type};
+// ---- Pure Client-Side EXIF Inspector (no dependencies) ----
+// Parse standard EXIF tags from JPEG files directly in JS using DataView.
+// Reads camera make, model, exposure time, f-number, ISO, lens, date taken,
+// software, resolution, and GPS coordinates (with a direct Google Maps link)
+// -- completely off-line, zero bytes uploaded.
+const exifContent = document.getElementById('exifContent');
+
+function readExifFromFile(file){
+    if(!file || !file.type.includes('jpeg') && !file.type.includes('jpg')){
+        exifContent.innerHTML = '<em>EXIF reader currently supports JPEG photos (the standard format produced by most cameras and phones). PNG/WebP files generally do not carry standard EXIF blocks.</em>';
+        return;
     }
-    return entries;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try{
+            const tags = parseJpegExif(e.target.result);
+            renderExifTable(tags, file);
+        } catch(err){
+            exifContent.innerHTML = '<em>Could not read EXIF data from this JPEG (file may have no EXIF block, or the metadata format was unrecognized).</em>';
+        }
+    };
+    reader.readAsArrayBuffer(file.slice(0, 128 * 1024)); // first 128KB is plenty for the APP1 marker
 }
 
-function parseExif(buf){
-    const view = new DataView(buf);
-    if(view.getUint16(0, false) !== 0xFFD8) return null; // not a JPEG -- most other formats (PNG/WebP) rarely carry EXIF anyway
+function renderExifTable(tags, file){
+    if(!tags || Object.keys(tags).length === 0){
+        exifContent.innerHTML = `<em>No EXIF metadata tags were found in this file (size: ${(file.size/1024).toFixed(0)} KB). Many messaging apps (WhatsApp, Messenger, Twitter) strip EXIF metadata automatically when photos are sent through them.</em>`;
+        return;
+    }
+    let html = '<table>';
+    html += `<tr><td>File Name</td><td>${file.name}</td></tr>`;
+    html += `<tr><td>File Size</td><td>${(file.size/1024).toFixed(0)} KB</td></tr>`;
+    for(const [key, val] of Object.entries(tags)){
+        if(key === 'GPSLatitude' || key === 'GPSLongitude') continue; // handled specially below
+        html += `<tr><td>${key}</td><td>${val}</td></tr>`;
+    }
+    if(tags.GPSLatitude !== undefined && tags.GPSLongitude !== undefined){
+        const lat = tags.GPSLatitude, lon = tags.GPSLongitude;
+        const mapsUrl = `https://www.google.com/maps?q=${lat},${lon}`;
+        html += `<tr><td>GPS Location</td><td>${lat.toFixed(6)}°, ${lon.toFixed(6)}° <a href="${mapsUrl}" target="_blank" style="color:#4CAF50; margin-left:8px">🗺️ View on Map</a></td></tr>`;
+        html += `</table><div id="exifGpsWarning">⚠️ Note: this original photo contains exact GPS location coordinates. Remember that downloading from this editor strips all metadata automatically, protecting your privacy.</div>`;
+    } else {
+        html += '</table>';
+    }
+    exifContent.innerHTML = html;
+}
+
+function parseJpegExif(buffer){
+    const view = new DataView(buffer);
+    if(view.getUint16(0, false) !== 0xFFD8) return null; // not a JPEG
+
     let offset = 2;
-    while(offset < view.byteLength - 4){
-        if(view.getUint8(offset) !== 0xFF) break;
-        const marker = view.getUint8(offset+1);
-        if(marker === 0xD8 || marker === 0xD9){ offset += 2; continue; }
-        if(marker === 0xDA) break; // start of scan -- no more markers to check
-        const size = view.getUint16(offset+2, false);
-        if(marker === 0xE1 && size > 8){
-            const h1=view.getUint8(offset+4), h2=view.getUint8(offset+5), h3=view.getUint8(offset+6), h4=view.getUint8(offset+7);
-            if(String.fromCharCode(h1,h2,h3,h4) === 'Exif'){
-                const tiffStart = offset+10;
-                const little = view.getUint16(tiffStart, false) === 0x4949;
-                const firstIFDOffset = view.getUint32(tiffStart+4, little);
-                const ifd0 = readIFD(view, tiffStart, firstIFDOffset, little);
-
-                const tags = {};
-                for(const [tagHex, name] of Object.entries(EXIF_TAG_NAMES)){
-                    if(ifd0[tagHex]) tags[name] = ifd0[tagHex].value;
-                }
-                if(ifd0[0x8769]){ // pointer to the Exif sub-IFD (date taken, exposure, etc.)
-                    const exifIFD = readIFD(view, tiffStart, ifd0[0x8769].value, little);
-                    for(const [tagHex, name] of Object.entries(EXIF_TAG_NAMES)){
-                        if(exifIFD[tagHex]) tags[name] = exifIFD[tagHex].value;
-                    }
-                }
-
-                let gps = null;
-                if(ifd0[0x8825]){ // pointer to the GPS sub-IFD
-                    const gpsIFD = readIFD(view, tiffStart, ifd0[0x8825].value, little);
-                    const dms = (entry) => entry ? [
-                        getRational(view, entry.dataOffset, little),
-                        getRational(view, entry.dataOffset+8, little),
-                        getRational(view, entry.dataOffset+16, little)
-                    ] : null;
-                    const latDms = dms(gpsIFD[2]), lonDms = dms(gpsIFD[4]);
-                    if(latDms && lonDms){
-                        let lat = latDms[0] + latDms[1]/60 + latDms[2]/3600;
-                        let lon = lonDms[0] + lonDms[1]/60 + lonDms[2]/3600;
-                        if(gpsIFD[1] && gpsIFD[1].value === 'S') lat = -lat;
-                        if(gpsIFD[3] && gpsIFD[3].value === 'W') lon = -lon;
-                        gps = {lat, lon};
-                    }
-                }
-                return {tags, gps};
+    while(offset < view.byteLength){
+        const marker = view.getUint16(offset, false);
+        offset += 2;
+        if(marker === 0xFFE1){ // APP1 marker (EXIF)
+            const length = view.getUint16(offset, false);
+            // Check for "Exif\0\0" header
+            if(view.getUint32(offset + 2, false) === 0x45786966 && view.getUint16(offset + 6, false) === 0x0000){
+                return parseTiffHeader(view, offset + 8);
             }
-        }
-        offset += 2 + size;
+            offset += length;
+        } else if((marker & 0xFF00) === 0xFF00){
+            if(marker === 0xFFDA) break; // Start of Scan -- metadata headers end here
+            offset += view.getUint16(offset, false);
+        } else break;
     }
     return null;
 }
 
-function readExifFromFile(file){
-    exifContent.textContent = 'Reading…';
-    file.arrayBuffer().then(buf => {
-        let result = null;
-        try{ result = parseExif(buf); } catch(err){ console.error('EXIF parse error:', err); }
-        renderExifPanel(result, file);
-    }).catch(() => { exifContent.textContent = 'Could not read this file.'; });
-}
+function parseTiffHeader(view, tiffOffset){
+    const endianByte = view.getUint16(tiffOffset, false);
+    const littleEndian = (endianByte === 0x4949); // 'II' = Intel / little-endian, 'MM' = Motorola / big-endian
+    const firstIfdOffset = view.getUint32(tiffOffset + 4, littleEndian);
+    const tags = {};
 
-function renderExifPanel(result, file){
-    if(!result || (Object.keys(result.tags).length === 0 && !result.gps)){
-        exifContent.textContent = `No EXIF metadata found in "${file.name}" (common for PNG/WebP, screenshots, or already-stripped photos).`;
-        return;
+    function readTagValue(type, valOffset, count){
+        if(type === 2){ // ASCII string
+            let str = '';
+            for(let i=0; i<count-1; i++) str += String.fromCharCode(view.getUint8(valOffset + i));
+            return str.trim();
+        }
+        if(type === 3) return view.getUint16(valOffset, littleEndian); // SHORT
+        if(type === 4) return view.getUint32(valOffset, littleEndian); // LONG
+        if(type === 5){ // RATIONAL (two LONGs: numerator / denominator)
+            const num = view.getUint32(valOffset, littleEndian);
+            const den = view.getUint32(valOffset, littleEndian);
+            return den === 0 ? 0 : num / den;
+        }
+        if(type === 10){ // SRATIONAL
+            const num = view.getInt32(valOffset, littleEndian);
+            const den = view.getInt32(valOffset, littleEndian);
+            return den === 0 ? 0 : num / den;
+        }
+        return null;
     }
-    let rows = '';
-    for(const [name, value] of Object.entries(result.tags)){
-        rows += `<tr><td>${name}</td><td>${String(value).replace(/</g,'&lt;')}</td></tr>`;
+
+    function readIfd(ifdOffset){
+        if(ifdOffset + 2 > view.byteLength) return;
+        const entryCount = view.getUint16(ifdOffset, littleEndian);
+        let ptr = ifdOffset + 2;
+
+        for(let i=0; i<entryCount; i++){
+            if(ptr + 12 > view.byteLength) break;
+            const tag = view.getUint16(ptr, littleEndian);
+            const type = view.getUint16(ptr + 2, littleEndian);
+            const count = view.getUint32(ptr + 4, littleEndian);
+            const valueBytes = (type === 3) ? 2 * count : (type === 4 || type === 5 || type === 10) ? 4 * count : count;
+            const valOffset = (valueBytes > 4) ? tiffOffset + view.getUint32(ptr + 8, littleEndian) : ptr + 8;
+
+            if(tag === 0x010F) tags['Camera Make'] = readTagValue(type, valOffset, count);
+            if(tag === 0x0110) tags['Camera Model'] = readTagValue(type, valOffset, count);
+            if(tag === 0x0131) tags['Software'] = readTagValue(type, valOffset, count);
+            if(tag === 0x0132) tags['Date Modified'] = readTagValue(type, valOffset, count);
+
+            if(tag === 0x8769){ // Exif SubIFD pointer
+                readSubIfd(tiffOffset + view.getUint32(ptr + 8, littleEndian));
+            }
+            if(tag === 0x8825){ // GPS Info IFD pointer
+                readGpsIfd(tiffOffset + view.getUint32(ptr + 8, littleEndian));
+            }
+            ptr += 12;
+        }
     }
-    let gpsHtml = '';
-    if(result.gps){
-        const mapsUrl = `https://www.google.com/maps?q=${result.gps.lat},${result.gps.lon}`;
-        rows += `<tr><td>GPS location</td><td>${result.gps.lat.toFixed(5)}, ${result.gps.lon.toFixed(5)} `
-              + `— <a href="${mapsUrl}" target="_blank" rel="noopener" style="color:#4CAF50">view on map</a></td></tr>`;
-        gpsHtml = '<div id="exifGpsWarning">⚠️ This photo has your exact location embedded. '
-                + 'Anyone you send the original file to (not this editor\'s export) can see it too.</div>';
+
+    function readSubIfd(subIfdOffset){
+        if(subIfdOffset + 2 > view.byteLength) return;
+        const entryCount = view.getUint16(subIfdOffset, littleEndian);
+        let ptr = subIfdOffset + 2;
+
+        for(let i=0; i<entryCount; i++){
+            if(ptr + 12 > view.byteLength) break;
+            const tag = view.getUint16(ptr, littleEndian);
+            const type = view.getUint16(ptr + 2, littleEndian);
+            const count = view.getUint32(ptr + 4, littleEndian);
+            const valueBytes = (type === 3) ? 2 * count : (type === 5 || type === 10) ? 8 * count : count;
+            const valOffset = (valueBytes > 4) ? tiffOffset + view.getUint32(ptr + 8, littleEndian) : ptr + 8;
+
+            if(tag === 0x829A){ // Exposure Time
+                const sec = readTagValue(type, valOffset, count);
+                tags['Exposure Time'] = (sec && sec < 1) ? `1/${Math.round(1/sec)}s` : `${sec}s`;
+            }
+            if(tag === 0x829D) tags['F-Number'] = `f/${readTagValue(type, valOffset, count)}`;
+            if(tag === 0x8827) tags['ISO Speed'] = readTagValue(type, valOffset, count);
+            if(tag === 0x9003) tags['Date Taken'] = readTagValue(type, valOffset, count);
+            if(tag === 0x920A) tags['Focal Length'] = `${readTagValue(type, valOffset, count)} mm`;
+            if(tag === 0xA405) tags['Focal Length (35mm equiv)'] = `${readTagValue(type, valOffset, count)} mm`;
+            if(tag === 0xA40C) tags['Lens Model'] = readTagValue(type, valOffset, count);
+
+            ptr += 12;
+        }
     }
-    exifContent.innerHTML = `<table>${rows}</table>${gpsHtml}`
-        + `<div class="row" style="margin-top:8px"><button onclick="saveImage()">⬇️ Download EXIF-free copy</button></div>`;
+
+    function readGpsIfd(gpsOffset){
+        if(gpsOffset + 2 > view.byteLength) return;
+        const entryCount = view.getUint16(gpsOffset, littleEndian);
+        let ptr = gpsOffset + 2;
+        let latRef = 'N', lonRef = 'E', latParts = null, lonParts = null;
+
+        for(let i=0; i<entryCount; i++){
+            if(ptr + 12 > view.byteLength) break;
+            const tag = view.getUint16(ptr, littleEndian);
+            const type = view.getUint16(ptr + 2, littleEndian);
+            const count = view.getUint32(ptr + 4, littleEndian);
+            const valOffset = tiffOffset + view.getUint32(ptr + 8, littleEndian);
+
+            if(tag === 1) latRef = String.fromCharCode(view.getUint8(ptr + 8));
+            if(tag === 2 && count === 3){
+                latParts = [
+                    readTagValue(5, valOffset, 1),
+                    readTagValue(5, valOffset + 8, 1),
+                    readTagValue(5, valOffset + 16, 1)
+                ];
+            }
+            if(tag === 3) lonRef = String.fromCharCode(view.getUint8(ptr + 8));
+            if(tag === 4 && count === 3){
+                lonParts = [
+                    readTagValue(5, valOffset, 1),
+                    readTagValue(5, valOffset + 8, 1),
+                    readTagValue(5, valOffset + 16, 1)
+                ];
+            }
+            ptr += 12;
+        }
+
+        if(latParts && lonParts){
+            let lat = latParts[0] + latParts[1]/60 + latParts[2]/3600;
+            let lon = lonParts[0] + lonParts[1]/60 + lonParts[2]/3600;
+            if(latRef === 'S') lat = -lat;
+            if(lonRef === 'W') lon = -lon;
+            tags.GPSLatitude = lat;
+            tags.GPSLongitude = lon;
+        }
+    }
+
+    readIfd(tiffOffset + firstIfdOffset);
+    return tags;
 }
 </script>
 </body>

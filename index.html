@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document Scanner & Perspective Correction</title>
-    <!-- OpenCV.js for robust edge detection and perspective warp -->
+    <title>High-Precision Document Scanner</title>
     <script async src="https://docs.opencv.org/4.x/opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
     <style>
         * {
@@ -14,9 +13,9 @@
             user-select: none;
         }
         body {
-            background-color: #121212;
+            background-color: #0f111a;
             color: #ffffff;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -26,7 +25,7 @@
         h2 {
             margin-bottom: 12px;
             font-size: 1.2rem;
-            color: #e0e0e0;
+            color: #4fc3f7;
         }
         .controls {
             display: flex;
@@ -36,20 +35,21 @@
             justify-content: center;
         }
         button, label.upload-btn {
-            background-color: #1e88e5;
-            color: white;
-            padding: 10px 16px;
+            background-color: #29b6f6;
+            color: #000000;
+            padding: 10px 18px;
             border-radius: 8px;
             border: none;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: all 0.2s;
         }
         button:hover, label.upload-btn:hover {
-            background-color: #1565c0;
+            background-color: #81d4fa;
         }
         button:disabled {
-            background-color: #424242;
+            background-color: #37474f;
+            color: #78909c;
             cursor: not-allowed;
         }
         input[type="file"] {
@@ -58,8 +58,8 @@
         .stage-container {
             position: relative;
             max-width: 100%;
-            max-height: 70vh;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            max-height: 65vh;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
             border-radius: 8px;
             overflow: hidden;
             background: #000;
@@ -69,7 +69,7 @@
         }
         canvas {
             max-width: 100%;
-            max-height: 70vh;
+            max-height: 65vh;
             display: block;
         }
         #overlayCanvas {
@@ -79,12 +79,25 @@
             pointer-events: auto;
             touch-action: none;
         }
+        #magnifierCanvas {
+            position: absolute;
+            width: 120px;
+            height: 120px;
+            border: 3px solid #4fc3f7;
+            border-radius: 50%;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+            pointer-events: none;
+            display: none;
+            z-index: 100;
+            background-color: #000;
+        }
         .status-box {
             margin-top: 12px;
-            padding: 10px 14px;
-            background: #1e1e1e;
-            border-radius: 6px;
-            font-size: 0.9rem;
+            padding: 10px 16px;
+            background: #1c2333;
+            border-left: 4px solid #4fc3f7;
+            border-radius: 4px;
+            font-size: 0.85rem;
             color: #b0bec5;
             max-width: 600px;
             text-align: center;
@@ -92,13 +105,14 @@
         #outputCanvas {
             margin-top: 16px;
             display: none;
-            border: 2px solid #333;
+            border: 2px solid #29b6f6;
+            max-width: 100%;
         }
     </style>
 </head>
 <body>
 
-    <h2>Pro Document Scanner</h2>
+    <h2>Pro Document Scanner (Enhanced Boundary Detection)</h2>
 
     <div class="controls">
         <label class="upload-btn">
@@ -110,26 +124,30 @@
         <button id="resetBtn" disabled>Reset Corners</button>
     </div>
 
-    <div class="stage-container">
+    <div class="stage-container" id="stage">
         <canvas id="imageCanvas"></canvas>
         <canvas id="overlayCanvas"></canvas>
+        <canvas id="magnifierCanvas" width="120" height="120"></canvas>
     </div>
 
     <canvas id="outputCanvas"></canvas>
 
-    <div class="status-box" id="status">Loading OpenCV.js core engine...</div>
+    <div class="status-box" id="status">Loading OpenCV.js processing engine...</div>
 
     <script>
         let cvReady = false;
         let imgElement = new Image();
-        let corners = []; // [{x, y}, {x, y}, {x, y}, {x, y}] normalized to image coordinates
+        let corners = []; 
         let activeCorner = -1;
 
         const imageCanvas = document.getElementById('imageCanvas');
         const overlayCanvas = document.getElementById('overlayCanvas');
+        const magnifierCanvas = document.getElementById('magnifierCanvas');
         const outputCanvas = document.getElementById('outputCanvas');
+        
         const imgCtx = imageCanvas.getContext('2d');
         const overlayCtx = overlayCanvas.getContext('2d');
+        const magCtx = magnifierCanvas.getContext('2d');
         const statusEl = document.getElementById('status');
 
         const detectBtn = document.getElementById('detectBtn');
@@ -138,7 +156,7 @@
 
         function onOpenCvReady() {
             cvReady = true;
-            statusEl.innerText = "Scanner Ready. Upload or capture a document to begin.";
+            statusEl.innerText = "Engine ready. Upload an image to start scanning.";
         }
 
         document.getElementById('fileInput').addEventListener('change', (e) => {
@@ -163,13 +181,10 @@
         });
 
         function setupCanvases() {
-            const containerWidth = imgElement.width;
-            const containerHeight = imgElement.height;
-
-            imageCanvas.width = containerWidth;
-            imageCanvas.height = containerHeight;
-            overlayCanvas.width = containerWidth;
-            overlayCanvas.height = containerHeight;
+            imageCanvas.width = imgElement.width;
+            imageCanvas.height = imgElement.height;
+            overlayCanvas.width = imgElement.width;
+            overlayCanvas.height = imgElement.height;
 
             imgCtx.drawImage(imgElement, 0, 0);
             outputCanvas.style.display = 'none';
@@ -178,90 +193,95 @@
         function resetCornersDefault() {
             const w = imageCanvas.width;
             const h = imageCanvas.height;
-            const padX = w * 0.1;
-            const padY = h * 0.1;
+            const padX = w * 0.05;
+            const padY = h * 0.05;
             corners = [
-                { x: padX, y: padY },         // Top-Left
-                { x: w - padX, y: padY },     // Top-Right
-                { x: w - padX, y: h - padY }, // Bottom-Right
-                { x: padX, y: h - padY }      // Bottom-Left
+                { x: padX, y: padY },
+                { x: w - padX, y: padY },
+                { x: w - padX, y: h - padY },
+                { x: padX, y: h - padY }
             ];
             drawOverlay();
         }
 
-        // OpenCV Edge Detection Algorithm tuned for documents
+        // Multi-Stage Processing Pipeline for High Accuracy
         function autoDetectCorners() {
             if (!cvReady) return;
-            statusEl.innerText = "Detecting document boundary...";
+            statusEl.innerText = "Processing contours and page boundaries...";
 
             let src = cv.imread(imageCanvas);
             let gray = new cv.Mat();
-            let blurred = new cv.Mat();
+            let blur = new cv.Mat();
+            let thresh = new cv.Mat();
+            let morph = new cv.Mat();
             let edges = new cv.Mat();
 
-            // 1. Convert to Grayscale
+            // 1. Grayscale + Bilateral Filter (smooths text textures while keeping page borders sharp)
             cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+            cv.bilateralFilter(gray, blur, 9, 75, 75, cv.BORDER_DEFAULT);
 
-            // 2. Gaussian Blur to remove printed text noise
-            cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+            // 2. Adaptive Thresholding to separate document body from background
+            cv.adaptiveThreshold(blur, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
 
-            // 3. Canny Edge Detection
-            cv.Canny(blurred, edges, 75, 200);
+            // 3. Morphological Closing to seal book spine shadows and broken edge lines
+            let M = cv.Mat.ones(5, 5, cv.CV_8U);
+            cv.morphologyEx(thresh, morph, cv.MORPH_CLOSE, M);
 
-            // 4. Find Contours
+            // 4. Canny Edge Detection
+            cv.Canny(morph, edges, 50, 150);
+
+            // 5. Contour Selection & Convex Hull
             let contours = new cv.MatVector();
             let hierarchy = new cv.Mat();
-            cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+            cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
             let maxArea = 0;
-            let bestApprox = null;
+            let bestPoints = null;
+            const imageArea = src.rows * src.cols;
 
             for (let i = 0; i < contours.size(); ++i) {
                 let cnt = contours.get(i);
                 let area = cv.contourArea(cnt);
 
-                // Filter out small bounding boxes (text blocks, minor objects)
-                if (area > (src.rows * src.cols * 0.1)) {
-                    let peri = cv.arcLength(cnt, true);
-                    let approx = new cv.Mat();
-                    cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+                if (area > imageArea * 0.15) { // Reject small background elements
+                    let hull = new cv.Mat();
+                    cv.convexHull(cnt, hull);
 
-                    // Document boundary must be a 4-point convex polygon
+                    let peri = cv.arcLength(hull, true);
+                    let approx = new cv.Mat();
+                    cv.approxPolyDP(hull, approx, 0.02 * peri, true);
+
                     if (approx.rows === 4 && area > maxArea) {
                         maxArea = area;
-                        if (bestApprox) bestApprox.delete();
-                        bestApprox = approx;
-                    } else {
-                        approx.delete();
+                        bestPoints = [];
+                        for (let j = 0; j < 4; j++) {
+                            bestPoints.push({
+                                x: approx.data32S[j * 2],
+                                y: approx.data32S[j * 2 + 1]
+                            });
+                        }
                     }
+                    hull.delete();
+                    approx.delete();
                 }
                 cnt.delete();
             }
 
-            if (bestApprox) {
-                let points = [];
-                for (let i = 0; i < 4; i++) {
-                    points.push({
-                        x: bestApprox.data32S[i * 2],
-                        y: bestApprox.data32S[i * 2 + 1]
-                    });
-                }
-                corners = sortCorners(points);
-                bestApprox.delete();
-                statusEl.innerText = "Edges auto-detected! Nudge corners manually if needed.";
+            if (bestPoints) {
+                corners = sortCorners(bestPoints);
+                statusEl.innerText = "Page boundary isolated cleanly. Fine-tune handles if necessary.";
             } else {
-                statusEl.innerText = "Could not confidently locate document edges. Defaulting to frame bounds.";
+                statusEl.innerText = "Fallback triggered: Using edge-margin heuristic.";
                 resetCornersDefault();
             }
 
-            // Cleanup memory
-            src.delete(); gray.delete(); blurred.delete(); edges.delete();
-            contours.delete(); hierarchy.delete();
+            // Cleanup C++ bindings
+            src.delete(); gray.delete(); blur.delete(); thresh.delete(); 
+            morph.delete(); edges.delete(); M.delete(); contours.delete(); hierarchy.delete();
 
             drawOverlay();
         }
 
-        // Sort corners into [Top-Left, Top-Right, Bottom-Right, Bottom-Left]
         function sortCorners(pts) {
             pts.sort((a, b) => a.y - b.y);
             let topTwo = pts.slice(0, 2).sort((a, b) => a.x - b.x);
@@ -269,15 +289,14 @@
             return [topTwo[0], topTwo[1], bottomTwo[0], bottomTwo[1]];
         }
 
-        // Overlay Rendering (Polygon & Custom Drag Handles)
         function drawOverlay() {
             overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
             if (corners.length !== 4) return;
 
-            // Translucent Mask
-            overlayCtx.fillStyle = 'rgba(76, 175, 80, 0.2)';
+            // Highlight Box Area
+            overlayCtx.fillStyle = 'rgba(79, 195, 247, 0.25)';
             overlayCtx.strokeStyle = '#00e676';
-            overlayCtx.lineWidth = Math.max(2, imageCanvas.width * 0.004);
+            overlayCtx.lineWidth = Math.max(3, imageCanvas.width * 0.005);
 
             overlayCtx.beginPath();
             overlayCtx.moveTo(corners[0].x, corners[0].y);
@@ -288,31 +307,114 @@
             overlayCtx.fill();
             overlayCtx.stroke();
 
-            // Draw Handles
-            const colors = ['#00e676', '#ffeb3b', '#00e676', '#00e676'];
-            const handleRadius = Math.max(10, imageCanvas.width * 0.015);
-
+            // Corner Handles
+            const handleRadius = Math.max(12, imageCanvas.width * 0.016);
             corners.forEach((pt, i) => {
                 overlayCtx.beginPath();
                 overlayCtx.arc(pt.x, pt.y, handleRadius, 0, 2 * Math.PI);
-                overlayCtx.fillStyle = colors[i];
-                overlayCtx.shadowColor = 'rgba(0,0,0,0.5)';
-                overlayCtx.shadowBlur = 6;
+                overlayCtx.fillStyle = (i === activeCorner) ? '#ffea00' : '#00e676';
                 overlayCtx.fill();
-                overlayCtx.lineWidth = 2;
+                overlayCtx.lineWidth = 3;
                 overlayCtx.strokeStyle = '#ffffff';
                 overlayCtx.stroke();
-                overlayCtx.shadowBlur = 0;
             });
         }
 
-        // Perspective Transformation Matrix Warp
+        // Precision Dragging & Magnifier Glass Update
+        function updateMagnifier(canvasPt, clientEvt) {
+            const zoomRatio = 2.5;
+            const magSize = 120;
+            const stageRect = document.getElementById('stage').getBoundingClientRect();
+
+            magnifierCanvas.style.display = 'block';
+            
+            // Offset loupe slightly above finger/cursor so it's not obscured
+            const posX = clientEvt.clientX - stageRect.left - (magSize / 2);
+            const posY = clientEvt.clientY - stageRect.top - magSize - 30;
+
+            magnifierCanvas.style.left = `${posX}px`;
+            magnifierCanvas.style.top = `${posY}px`;
+
+            magCtx.clearRect(0, 0, magSize, magSize);
+            magCtx.save();
+            magCtx.beginPath();
+            magCtx.arc(magSize / 2, magSize / 2, magSize / 2, 0, Math.PI * 2);
+            magCtx.clip();
+
+            // Render zoomed original image segment
+            magCtx.drawImage(
+                imageCanvas,
+                canvasPt.x - (magSize / (2 * zoomRatio)),
+                canvasPt.y - (magSize / (2 * zoomRatio)),
+                magSize / zoomRatio,
+                magSize / zoomRatio,
+                0, 0, magSize, magSize
+            );
+
+            // Crosshair indicator inside magnifier
+            magCtx.strokeStyle = '#ff1744';
+            magCtx.lineWidth = 2;
+            magCtx.beginPath();
+            magCtx.moveTo(magSize / 2 - 10, magSize / 2);
+            magCtx.lineTo(magSize / 2 + 10, magSize / 2);
+            magCtx.moveTo(magSize / 2, magSize / 2 - 10);
+            magCtx.lineTo(magSize / 2, magSize / 2 + 10);
+            magCtx.stroke();
+
+            magCtx.restore();
+        }
+
+        function getCanvasPoint(evt) {
+            const rect = overlayCanvas.getBoundingClientRect();
+            const scaleX = overlayCanvas.width / rect.width;
+            const scaleY = overlayCanvas.height / rect.height;
+
+            const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+            const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
+
+        function handlePointerDown(e) {
+            const pt = getCanvasPoint(e);
+            const threshold = Math.max(35, imageCanvas.width * 0.05);
+            activeCorner = corners.findIndex(c => Math.hypot(c.x - pt.x, c.y - pt.y) < threshold);
+
+            if (activeCorner !== -1) {
+                const clientEvt = e.touches ? e.touches[0] : e;
+                updateMagnifier(corners[activeCorner], clientEvt);
+            }
+        }
+
+        function handlePointerMove(e) {
+            if (activeCorner === -1) return;
+            e.preventDefault();
+            const pt = getCanvasPoint(e);
+            corners[activeCorner] = {
+                x: Math.min(Math.max(0, pt.x), imageCanvas.width),
+                y: Math.min(Math.max(0, pt.y), imageCanvas.height)
+            };
+            drawOverlay();
+
+            const clientEvt = e.touches ? e.touches[0] : e;
+            updateMagnifier(corners[activeCorner], clientEvt);
+        }
+
+        function handlePointerUp() {
+            activeCorner = -1;
+            magnifierCanvas.style.display = 'none';
+            drawOverlay();
+        }
+
+        // High-Resolution Perspective Transformation
         function cropAndWarp() {
             if (!cvReady || corners.length !== 4) return;
 
             let src = cv.imread(imageCanvas);
             
-            // Calculate destination rectangle dimensions
             let w1 = Math.hypot(corners[1].x - corners[0].x, corners[1].y - corners[0].y);
             let w2 = Math.hypot(corners[2].x - corners[3].x, corners[2].y - corners[3].y);
             let maxWidth = Math.max(w1, w2);
@@ -339,49 +441,13 @@
             let dst = new cv.Mat();
             let dsize = new cv.Size(maxWidth, maxHeight);
 
-            cv.warpPerspective(src, dst, M, dsize, cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+            cv.warpPerspective(src, dst, M, dsize, cv.INTER_CUBIC, cv.BORDER_CONSTANT, new cv.Scalar());
 
             cv.imshow(outputCanvas, dst);
             outputCanvas.style.display = 'block';
-            statusEl.innerText = "Warp complete! Transformed image output generated below.";
+            statusEl.innerText = "Transform complete! Cleaned document rendered below.";
 
             src.delete(); dst.delete(); M.delete(); srcTri.delete(); dstTri.delete();
-        }
-
-        // Touch & Drag Handling for Handles
-        function getCanvasPoint(evt) {
-            const rect = overlayCanvas.getBoundingClientRect();
-            const scaleX = overlayCanvas.width / rect.width;
-            const scaleY = overlayCanvas.height / rect.height;
-
-            const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
-            const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
-
-            return {
-                x: (clientX - rect.left) * scaleX,
-                y: (clientY - rect.top) * scaleY
-            };
-        }
-
-        function handlePointerDown(e) {
-            const pt = getCanvasPoint(e);
-            const threshold = Math.max(30, imageCanvas.width * 0.04);
-            activeCorner = corners.findIndex(c => Math.hypot(c.x - pt.x, c.y - pt.y) < threshold);
-        }
-
-        function handlePointerMove(e) {
-            if (activeCorner === -1) return;
-            e.preventDefault();
-            const pt = getCanvasPoint(e);
-            corners[activeCorner] = {
-                x: Math.min(Math.max(0, pt.x), imageCanvas.width),
-                y: Math.min(Math.max(0, pt.y), imageCanvas.height)
-            };
-            drawOverlay();
-        }
-
-        function handlePointerUp() {
-            activeCorner = -1;
         }
 
         overlayCanvas.addEventListener('mousedown', handlePointerDown);

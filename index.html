@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>High-Precision Document Scanner</title>
+    <title>Pro Photo Editor v2 - Document Scanner</title>
     <script async src="https://docs.opencv.org/4.x/opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
     <style>
         * {
@@ -13,63 +13,52 @@
             user-select: none;
         }
         body {
-            background-color: #0f111a;
+            background-color: #000000;
             color: #ffffff;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-            padding: 16px;
+            height: 100vh;
+            overflow: hidden;
         }
-        h2 {
-            margin-bottom: 12px;
-            font-size: 1.2rem;
-            color: #4fc3f7;
-        }
-        .controls {
+
+        /* Top Header Bar */
+        .header-bar {
             display: flex;
-            gap: 10px;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-            justify-content: center;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background-color: #000000;
         }
-        button, label.upload-btn {
-            background-color: #29b6f6;
-            color: #000000;
-            padding: 10px 18px;
-            border-radius: 8px;
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        .icon-btn {
+            background: none;
             border: none;
-            font-weight: 700;
+            color: #ffffff;
+            font-size: 1.5rem;
             cursor: pointer;
-            transition: all 0.2s;
+            padding: 4px;
         }
-        button:hover, label.upload-btn:hover {
-            background-color: #81d4fa;
-        }
-        button:disabled {
-            background-color: #37474f;
-            color: #78909c;
-            cursor: not-allowed;
-        }
-        input[type="file"] {
-            display: none;
-        }
+
+        /* Main Workspace Stage */
         .stage-container {
             position: relative;
-            max-width: 100%;
-            max-height: 65vh;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            border-radius: 8px;
-            overflow: hidden;
-            background: #000;
+            flex: 1;
             display: flex;
             justify-content: center;
             align-items: center;
+            background-color: #121212;
+            overflow: hidden;
         }
         canvas {
             max-width: 100%;
-            max-height: 65vh;
+            max-height: 100%;
             display: block;
         }
         #overlayCanvas {
@@ -81,58 +70,175 @@
         }
         #magnifierCanvas {
             position: absolute;
-            width: 120px;
-            height: 120px;
-            border: 3px solid #4fc3f7;
+            width: 110px;
+            height: 110px;
+            border: 3px solid #00e676;
             border-radius: 50%;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.7);
             pointer-events: none;
             display: none;
             z-index: 100;
             background-color: #000;
         }
-        .status-box {
-            margin-top: 12px;
-            padding: 10px 16px;
-            background: #1c2333;
-            border-left: 4px solid #4fc3f7;
-            border-radius: 4px;
+
+        /* Action Buttons Area */
+        .action-container {
+            padding: 12px 16px;
+            background-color: #121212;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .primary-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+        .btn-action {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .btn-green {
+            background-color: #2e7d32;
+            color: #ffffff;
+        }
+        .btn-outline {
+            background-color: #1e2922;
+            color: #a5d6a7;
+            border: 1px solid #2e7d32;
+        }
+        .btn-action:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* Info / Instruction Banner */
+        .info-card {
+            background-color: #1c1c1e;
+            border-radius: 8px;
+            padding: 12px 14px;
             font-size: 0.85rem;
-            color: #b0bec5;
-            max-width: 600px;
-            text-align: center;
+            color: #e0e0e0;
+            line-height: 1.4;
         }
+
+        /* Bottom Feature Navigation Bar */
+        .bottom-nav {
+            display: flex;
+            justify-content: space-around;
+            background-color: #000000;
+            padding: 10px 0;
+            border-top: 1px solid #222;
+        }
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            color: #8e8e93;
+            font-size: 0.75rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+            width: 20%;
+        }
+        .nav-item.active {
+            color: #00e676;
+        }
+        .nav-icon-box {
+            width: 40px;
+            height: 32px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        /* Output Sheet Modal */
         #outputCanvas {
-            margin-top: 16px;
             display: none;
-            border: 2px solid #29b6f6;
-            max-width: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: contain;
+            background: rgba(0,0,0,0.95);
+            z-index: 200;
         }
+        input[type="file"] { display: none; }
     </style>
 </head>
 <body>
 
-    <h2>Pro Document Scanner (Enhanced Boundary Detection)</h2>
-
-    <div class="controls">
-        <label class="upload-btn">
-            📷 Select Image
-            <input type="file" id="fileInput" accept="image/*">
-        </label>
-        <button id="detectBtn" disabled>Auto-Detect Edges</button>
-        <button id="cropBtn" disabled>Crop & Straighten</button>
-        <button id="resetBtn" disabled>Reset Corners</button>
+    <!-- Header Bar -->
+    <div class="header-bar">
+        <button class="icon-btn" onclick="document.getElementById('fileInput').click()">←</button>
+        <div class="header-title">
+            📷 Pro Photo Editor v2
+        </div>
+        <button class="icon-btn" id="saveBtn">⋮</button>
     </div>
 
+    <!-- Main Image Canvas Area -->
     <div class="stage-container" id="stage">
         <canvas id="imageCanvas"></canvas>
         <canvas id="overlayCanvas"></canvas>
-        <canvas id="magnifierCanvas" width="120" height="120"></canvas>
+        <canvas id="magnifierCanvas" width="110" height="110"></canvas>
     </div>
 
-    <canvas id="outputCanvas"></canvas>
+    <!-- Action Bar -->
+    <div class="action-container">
+        <div class="primary-actions">
+            <button class="btn-action btn-green" id="cropBtn" disabled>
+                ✂️ Crop & Straighten
+            </button>
+            <button class="btn-action btn-outline" id="resetBtn" disabled>
+                ↺ Reset corners
+            </button>
+        </div>
+        <div class="info-card" id="statusCard">
+            Edges auto-detected — check they look right and nudge any dot if needed, then tap Straighten. (Finds the strongest boundary lines, not just brightness -- still a starting guess, not always perfect on cluttered or very low-contrast scenes.)
+        </div>
+    </div>
 
-    <div class="status-box" id="status">Loading OpenCV.js processing engine...</div>
+    <!-- Bottom Utility Options -->
+    <div class="bottom-nav">
+        <button class="nav-item">
+            <div class="nav-icon-box" style="background-color: #1b382b; color: #4caf50;">📑</div>
+            Text
+        </button>
+        <button class="nav-item">
+            <div class="nav-icon-box" style="background-color: #1b382b; color: #4caf50;">🪄</div>
+            Object
+        </button>
+        <button class="nav-item active" onclick="document.getElementById('fileInput').click()">
+            <div class="nav-icon-box" style="background-color: #e65100; color: #ffffff;">📄</div>
+            Document
+        </button>
+        <button class="nav-item">
+            <div class="nav-icon-box" style="background-color: #1b382b; color: #4caf50;">🔍</div>
+            EXIF
+        </button>
+        <button class="nav-item">
+            <div class="nav-icon-box" style="background-color: #1b382b; color: #4caf50;">✨</div>
+            Filter
+        </button>
+    </div>
+
+    <input type="file" id="fileInput" accept="image/*">
+    <canvas id="outputCanvas"></canvas>
 
     <script>
         let cvReady = false;
@@ -148,15 +254,13 @@
         const imgCtx = imageCanvas.getContext('2d');
         const overlayCtx = overlayCanvas.getContext('2d');
         const magCtx = magnifierCanvas.getContext('2d');
-        const statusEl = document.getElementById('status');
+        const statusCard = document.getElementById('statusCard');
 
-        const detectBtn = document.getElementById('detectBtn');
         const cropBtn = document.getElementById('cropBtn');
         const resetBtn = document.getElementById('resetBtn');
 
         function onOpenCvReady() {
             cvReady = true;
-            statusEl.innerText = "Engine ready. Upload an image to start scanning.";
         }
 
         document.getElementById('fileInput').addEventListener('change', (e) => {
@@ -171,7 +275,6 @@
                     } else {
                         resetCornersDefault();
                     }
-                    detectBtn.disabled = false;
                     cropBtn.disabled = false;
                     resetBtn.disabled = false;
                 };
@@ -188,13 +291,24 @@
 
             imgCtx.drawImage(imgElement, 0, 0);
             outputCanvas.style.display = 'none';
+            adjustCanvasDisplay();
         }
+
+        function adjustCanvasDisplay() {
+            const rect = imageCanvas.getBoundingClientRect();
+            overlayCanvas.style.width = rect.width + 'px';
+            overlayCanvas.style.height = rect.height + 'px';
+            overlayCanvas.style.top = imageCanvas.offsetTop + 'px';
+            overlayCanvas.style.left = imageCanvas.offsetLeft + 'px';
+        }
+
+        window.addEventListener('resize', adjustCanvasDisplay);
 
         function resetCornersDefault() {
             const w = imageCanvas.width;
             const h = imageCanvas.height;
-            const padX = w * 0.05;
-            const padY = h * 0.05;
+            const padX = w * 0.08;
+            const padY = h * 0.08;
             corners = [
                 { x: padX, y: padY },
                 { x: w - padX, y: padY },
@@ -204,10 +318,8 @@
             drawOverlay();
         }
 
-        // Multi-Stage Processing Pipeline for High Accuracy
         function autoDetectCorners() {
             if (!cvReady) return;
-            statusEl.innerText = "Processing contours and page boundaries...";
 
             let src = cv.imread(imageCanvas);
             let gray = new cv.Mat();
@@ -216,21 +328,14 @@
             let morph = new cv.Mat();
             let edges = new cv.Mat();
 
-            // 1. Grayscale + Bilateral Filter (smooths text textures while keeping page borders sharp)
             cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
             cv.bilateralFilter(gray, blur, 9, 75, 75, cv.BORDER_DEFAULT);
-
-            // 2. Adaptive Thresholding to separate document body from background
             cv.adaptiveThreshold(blur, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
 
-            // 3. Morphological Closing to seal book spine shadows and broken edge lines
             let M = cv.Mat.ones(5, 5, cv.CV_8U);
             cv.morphologyEx(thresh, morph, cv.MORPH_CLOSE, M);
-
-            // 4. Canny Edge Detection
             cv.Canny(morph, edges, 50, 150);
 
-            // 5. Contour Selection & Convex Hull
             let contours = new cv.MatVector();
             let hierarchy = new cv.Mat();
             cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
@@ -243,7 +348,7 @@
                 let cnt = contours.get(i);
                 let area = cv.contourArea(cnt);
 
-                if (area > imageArea * 0.15) { // Reject small background elements
+                if (area > imageArea * 0.12) {
                     let hull = new cv.Mat();
                     cv.convexHull(cnt, hull);
 
@@ -269,13 +374,10 @@
 
             if (bestPoints) {
                 corners = sortCorners(bestPoints);
-                statusEl.innerText = "Page boundary isolated cleanly. Fine-tune handles if necessary.";
             } else {
-                statusEl.innerText = "Fallback triggered: Using edge-margin heuristic.";
                 resetCornersDefault();
             }
 
-            // Cleanup C++ bindings
             src.delete(); gray.delete(); blur.delete(); thresh.delete(); 
             morph.delete(); edges.delete(); M.delete(); contours.delete(); hierarchy.delete();
 
@@ -293,10 +395,10 @@
             overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
             if (corners.length !== 4) return;
 
-            // Highlight Box Area
-            overlayCtx.fillStyle = 'rgba(79, 195, 247, 0.25)';
+            // Semi-transparent overlay polygon
+            overlayCtx.fillStyle = 'rgba(76, 175, 80, 0.25)';
             overlayCtx.strokeStyle = '#00e676';
-            overlayCtx.lineWidth = Math.max(3, imageCanvas.width * 0.005);
+            overlayCtx.lineWidth = Math.max(3, imageCanvas.width * 0.004);
 
             overlayCtx.beginPath();
             overlayCtx.moveTo(corners[0].x, corners[0].y);
@@ -308,29 +410,47 @@
             overlayCtx.stroke();
 
             // Corner Handles
-            const handleRadius = Math.max(12, imageCanvas.width * 0.016);
+            const handleRadius = Math.max(12, imageCanvas.width * 0.015);
+            const handleColors = ['#00e676', '#ffeb3b', '#00e676', '#00e676'];
+
             corners.forEach((pt, i) => {
                 overlayCtx.beginPath();
                 overlayCtx.arc(pt.x, pt.y, handleRadius, 0, 2 * Math.PI);
-                overlayCtx.fillStyle = (i === activeCorner) ? '#ffea00' : '#00e676';
+                overlayCtx.fillStyle = handleColors[i];
                 overlayCtx.fill();
                 overlayCtx.lineWidth = 3;
                 overlayCtx.strokeStyle = '#ffffff';
                 overlayCtx.stroke();
             });
+
+            // Edge Midpoints
+            const midpoints = [
+                { x: (corners[0].x + corners[1].x) / 2, y: (corners[0].y + corners[1].y) / 2 },
+                { x: (corners[1].x + corners[2].x) / 2, y: (corners[1].y + corners[2].y) / 2 },
+                { x: (corners[2].x + corners[3].x) / 2, y: (corners[2].y + corners[3].y) / 2 },
+                { x: (corners[3].x + corners[0].x) / 2, y: (corners[3].y + corners[0].y) / 2 }
+            ];
+
+            midpoints.forEach(pt => {
+                overlayCtx.beginPath();
+                overlayCtx.arc(pt.x, pt.y, handleRadius * 0.7, 0, 2 * Math.PI);
+                overlayCtx.fillStyle = '#29b6f6';
+                overlayCtx.fill();
+                overlayCtx.lineWidth = 2;
+                overlayCtx.strokeStyle = '#ffffff';
+                overlayCtx.stroke();
+            });
         }
 
-        // Precision Dragging & Magnifier Glass Update
         function updateMagnifier(canvasPt, clientEvt) {
             const zoomRatio = 2.5;
-            const magSize = 120;
+            const magSize = 110;
             const stageRect = document.getElementById('stage').getBoundingClientRect();
 
             magnifierCanvas.style.display = 'block';
             
-            // Offset loupe slightly above finger/cursor so it's not obscured
             const posX = clientEvt.clientX - stageRect.left - (magSize / 2);
-            const posY = clientEvt.clientY - stageRect.top - magSize - 30;
+            const posY = clientEvt.clientY - stageRect.top - magSize - 20;
 
             magnifierCanvas.style.left = `${posX}px`;
             magnifierCanvas.style.top = `${posY}px`;
@@ -341,7 +461,6 @@
             magCtx.arc(magSize / 2, magSize / 2, magSize / 2, 0, Math.PI * 2);
             magCtx.clip();
 
-            // Render zoomed original image segment
             magCtx.drawImage(
                 imageCanvas,
                 canvasPt.x - (magSize / (2 * zoomRatio)),
@@ -351,14 +470,13 @@
                 0, 0, magSize, magSize
             );
 
-            // Crosshair indicator inside magnifier
             magCtx.strokeStyle = '#ff1744';
             magCtx.lineWidth = 2;
             magCtx.beginPath();
-            magCtx.moveTo(magSize / 2 - 10, magSize / 2);
-            magCtx.lineTo(magSize / 2 + 10, magSize / 2);
-            magCtx.moveTo(magSize / 2, magSize / 2 - 10);
-            magCtx.lineTo(magSize / 2, magSize / 2 + 10);
+            magCtx.moveTo(magSize / 2 - 8, magSize / 2);
+            magCtx.lineTo(magSize / 2 + 8, magSize / 2);
+            magCtx.moveTo(magSize / 2, magSize / 2 - 8);
+            magCtx.lineTo(magSize / 2, magSize / 2 + 8);
             magCtx.stroke();
 
             magCtx.restore();
@@ -409,7 +527,6 @@
             drawOverlay();
         }
 
-        // High-Resolution Perspective Transformation
         function cropAndWarp() {
             if (!cvReady || corners.length !== 4) return;
 
@@ -445,7 +562,10 @@
 
             cv.imshow(outputCanvas, dst);
             outputCanvas.style.display = 'block';
-            statusEl.innerText = "Transform complete! Cleaned document rendered below.";
+
+            outputCanvas.onclick = () => {
+                outputCanvas.style.display = 'none';
+            };
 
             src.delete(); dst.delete(); M.delete(); srcTri.delete(); dstTri.delete();
         }
@@ -458,7 +578,6 @@
         overlayCanvas.addEventListener('touchmove', handlePointerMove, { passive: false });
         window.addEventListener('touchend', handlePointerUp);
 
-        detectBtn.addEventListener('click', autoDetectCorners);
         resetBtn.addEventListener('click', resetCornersDefault);
         cropBtn.addEventListener('click', cropAndWarp);
     </script>

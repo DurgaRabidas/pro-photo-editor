@@ -24,36 +24,41 @@
 
         /* Top Header Bar */
         .header-bar {
+            position: relative;
+            z-index: 50;
             display: flex;
             align-items: center;
             justify-content: space-between;
             padding: 12px 16px;
-            background-color: #000000;
+            background-color: #121212;
+            border-bottom: 1px solid #222;
         }
         .header-title {
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 1.25rem;
+            font-size: 1.1rem;
             font-weight: 600;
         }
         .icon-btn {
-            background: none;
-            border: none;
+            background: #222222;
+            border: 1px solid #444;
             color: #ffffff;
-            font-size: 1.5rem;
+            font-size: 1.2rem;
             cursor: pointer;
-            padding: 4px;
+            padding: 6px 12px;
+            border-radius: 6px;
         }
 
         /* Main Workspace Stage */
         .stage-container {
             position: relative;
+            z-index: 10;
             flex: 1;
             display: flex;
             justify-content: center;
             align-items: center;
-            background-color: #121212;
+            background-color: #000000;
             overflow: hidden;
         }
         canvas {
@@ -67,6 +72,7 @@
             left: 0;
             pointer-events: auto;
             touch-action: none;
+            z-index: 20;
         }
         #magnifierCanvas {
             position: absolute;
@@ -83,11 +89,14 @@
 
         /* Action Buttons Area */
         .action-container {
+            position: relative;
+            z-index: 50;
             padding: 12px 16px;
             background-color: #121212;
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 10px;
+            border-top: 1px solid #222;
         }
         .primary-actions {
             display: flex;
@@ -101,24 +110,28 @@
             justify-content: center;
             gap: 6px;
             padding: 12px;
-            border-radius: 8px;
+            border-radius: 24px;
             border: none;
-            font-size: 1rem;
+            font-size: 0.95rem;
             font-weight: 600;
             cursor: pointer;
-            transition: opacity 0.2s;
+            transition: all 0.2s;
         }
         .btn-green {
             background-color: #2e7d32;
             color: #ffffff;
+            box-shadow: 0 2px 8px rgba(46,125,50,0.4);
         }
         .btn-outline {
-            background-color: #1e2922;
-            color: #a5d6a7;
+            background-color: #1c2b20;
+            color: #81c784;
             border: 1px solid #2e7d32;
         }
         .btn-action:disabled {
-            opacity: 0.4;
+            background-color: #222222 !important;
+            color: #666666 !important;
+            border: 1px solid #333333 !important;
+            box-shadow: none !important;
             cursor: not-allowed;
         }
 
@@ -126,18 +139,20 @@
         .info-card {
             background-color: #1c1c1e;
             border-radius: 8px;
-            padding: 12px 14px;
-            font-size: 0.85rem;
-            color: #e0e0e0;
-            line-height: 1.4;
+            padding: 10px 12px;
+            font-size: 0.8rem;
+            color: #b0bec5;
+            line-height: 1.35;
         }
 
         /* Bottom Feature Navigation Bar */
         .bottom-nav {
+            position: relative;
+            z-index: 50;
             display: flex;
             justify-content: space-around;
             background-color: #000000;
-            padding: 10px 0;
+            padding: 8px 0 12px 0;
             border-top: 1px solid #222;
         }
         .nav-item {
@@ -156,13 +171,13 @@
             color: #00e676;
         }
         .nav-icon-box {
-            width: 40px;
-            height: 32px;
-            border-radius: 6px;
+            width: 44px;
+            height: 30px;
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.2rem;
+            font-size: 1.1rem;
         }
 
         /* Output Sheet Modal */
@@ -188,7 +203,7 @@
         <div class="header-title">
             📷 Pro Photo Editor v2
         </div>
-        <button class="icon-btn" id="saveBtn">⋮</button>
+        <button class="icon-btn" onclick="document.getElementById('fileInput').click()">⋮</button>
     </div>
 
     <!-- Main Image Canvas Area -->
@@ -209,7 +224,7 @@
             </button>
         </div>
         <div class="info-card" id="statusCard">
-            Edges auto-detected — check they look right and nudge any dot if needed, then tap Straighten. (Finds the strongest boundary lines, not just brightness -- still a starting guess, not always perfect on cluttered or very low-contrast scenes.)
+            Edges auto-detected — check they look right and nudge any dot if needed, then tap Straighten.
         </div>
     </div>
 
@@ -395,7 +410,6 @@
             overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
             if (corners.length !== 4) return;
 
-            // Semi-transparent overlay polygon
             overlayCtx.fillStyle = 'rgba(76, 175, 80, 0.25)';
             overlayCtx.strokeStyle = '#00e676';
             overlayCtx.lineWidth = Math.max(3, imageCanvas.width * 0.004);
@@ -409,7 +423,6 @@
             overlayCtx.fill();
             overlayCtx.stroke();
 
-            // Corner Handles
             const handleRadius = Math.max(12, imageCanvas.width * 0.015);
             const handleColors = ['#00e676', '#ffeb3b', '#00e676', '#00e676'];
 
@@ -423,7 +436,6 @@
                 overlayCtx.stroke();
             });
 
-            // Edge Midpoints
             const midpoints = [
                 { x: (corners[0].x + corners[1].x) / 2, y: (corners[0].y + corners[1].y) / 2 },
                 { x: (corners[1].x + corners[2].x) / 2, y: (corners[1].y + corners[2].y) / 2 },

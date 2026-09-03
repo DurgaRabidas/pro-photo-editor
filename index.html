@@ -58,6 +58,9 @@
     #shapeCropTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px; max-height:42vh; overflow-y:auto}
     #shapeCropTools.active {display:flex}
     #shapeCropStatus {font-size:13px; color:#eee; background:#1a1a1a; padding:8px; border-radius:6px}
+    #doubleExposureTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px; max-height:42vh; overflow-y:auto}
+    #doubleExposureTools.active {display:flex}
+    #doubleExposureStatus {font-size:13px; color:#eee; background:#1a1a1a; padding:8px; border-radius:6px}
     #scanStatus {font-size:13px; color:#eee; background:#1a1a1a; padding:8px; border-radius:6px}
     #bgApplyRow {display:none; flex-direction:column; gap:8px}
     #eraseTools.active {display:flex}
@@ -281,6 +284,49 @@
     </div>
 </div>
 
+<div id="doubleExposureTools">
+    <div class="row">
+        <label for="doubleExposureFile" id="doubleExposureFileLabel" style="padding:8px 12px; background:#4CAF50; border-radius:8px; cursor:pointer">🖼️ Load second photo</label>
+        <input type="file" id="doubleExposureFile" accept="image/*" class="visually-hidden-file">
+    </div>
+    <div class="row" id="doubleExposureBlendRow" style="display:none">
+        <label for="doubleExposureBlendMode">Blend mode:</label>
+        <select id="doubleExposureBlendMode">
+            <option value="source-over">Normal</option>
+            <option value="multiply">Multiply</option>
+            <option value="screen" selected>Screen</option>
+            <option value="overlay">Overlay</option>
+            <option value="darken">Darken</option>
+            <option value="lighten">Lighten</option>
+            <option value="color-dodge">Color Dodge</option>
+            <option value="color-burn">Color Burn</option>
+            <option value="hard-light">Hard Light</option>
+            <option value="soft-light">Soft Light</option>
+            <option value="difference">Difference</option>
+            <option value="exclusion">Exclusion</option>
+            <option value="hue">Hue</option>
+            <option value="saturation">Saturation</option>
+            <option value="color">Color</option>
+            <option value="luminosity">Luminosity</option>
+        </select>
+    </div>
+    <div class="filter-row" id="doubleExposureOpacityRow" style="display:none">
+        <label for="doubleExposureOpacity">Opacity</label>
+        <input type="range" id="doubleExposureOpacity" min="0" max="100" value="100">
+        <span id="doubleExposureOpacityVal">100%</span>
+    </div>
+    <div class="filter-row" id="doubleExposureSizeRow" style="display:none">
+        <label for="doubleExposureSize">Size</label>
+        <input type="range" id="doubleExposureSize" min="20" max="200" value="100">
+        <span id="doubleExposureSizeVal">100%</span>
+    </div>
+    <div id="doubleExposureStatus">Load a second photo, pick a blend mode, drag the dashed box to reposition it, then tap Apply. This bakes the blend into your working photo (undo-able like any other edit).</div>
+    <div class="row" id="doubleExposureApplyRow" style="display:none">
+        <button onclick="applyDoubleExposure()">✅ Apply</button>
+        <button onclick="cancelDoubleExposure()" class="danger">❌ Cancel</button>
+    </div>
+</div>
+
 <div id="exifTools">
     <div id="exifSaveNote">
         ℹ️ Note: everything you export with the 💾 Save button in this editor is already
@@ -303,6 +349,7 @@
     <button id="btnErase" onclick="setMode('erase')">🧹 Object Eraser</button>
     <button id="btnScan" onclick="setMode('scan')">📄 Document Scanner</button>
     <button id="btnShapeCrop" onclick="setMode('shapeCrop')">🔷 Shape Crop</button>
+    <button id="btnDoubleExposure" onclick="setMode('doubleExposure')">🌗 Double Exposure</button>
     <button id="btnExif" onclick="setMode('exif')">🔎 EXIF Info</button>
     <button onclick="undo()">↩️ Undo</button>
     <button onclick="redo()">↪️ Redo</button>
@@ -454,6 +501,103 @@ document.getElementById('shapeCropSize').oninput = (e) => {
     document.getElementById('shapeCropSizeVal').textContent = e.target.value + '%';
     updateShapeCropSize();
 };
+
+// ---- Double Exposure & Blend Modes ----
+// Canvas 2D natively supports the standard Photoshop-style blend modes via
+// ctx.globalCompositeOperation (multiply, screen, overlay, darken, lighten,
+// color-dodge, color-burn, hard-light, soft-light, difference, exclusion,
+// hue, saturation, color, luminosity) -- no manual per-pixel blend math
+// needed, it's part of the canvas spec and hardware-accelerated like any
+// other drawImage call.
+const doubleExposureStatus = document.getElementById('doubleExposureStatus');
+let doubleExposureImg = null;        // the second (overlay) photo
+let doubleExposureRect = null;       // {cx,cy,w,h} in content-space -- current position/size
+let doubleExposureBaseRect = null;   // {w,h} at 100% (cover-fit) -- the Size slider scales relative to this
+let doubleExposureBlendMode = 'screen';
+let doubleExposureOpacityPct = 100;
+let doubleExposureSizePct = 100;
+let doubleExposureActive = false;    // persists across mode switches while staged, like the Background preview
+let doubleExposureDragStart = null;
+
+document.getElementById('doubleExposureFile').onchange = (e) => {
+    if(!canvas.classList.contains('ready')){ doubleExposureStatus.textContent = '⚠️ Load a photo first.'; e.target.value=''; return; }
+    const file = e.target.files[0]; if(!file) return;
+    const im = new Image();
+    im.onload = () => {
+        doubleExposureImg = im;
+        // cover-fit the second photo over the whole canvas to start -- the
+        // classic double-exposure look is two full-frame images blended
+        const scale = Math.max(canvas.width/im.width, canvas.height/im.height);
+        const w = im.width*scale, h = im.height*scale;
+        doubleExposureBaseRect = {w, h};
+        doubleExposureRect = {cx: canvas.width/2, cy: canvas.height/2, w, h};
+        doubleExposureActive = true;
+        doubleExposureSizePct = 100;
+        document.getElementById('doubleExposureSize').value = 100;
+        document.getElementById('doubleExposureSizeVal').textContent = '100%';
+        document.getElementById('doubleExposureBlendRow').style.display = 'flex';
+        document.getElementById('doubleExposureOpacityRow').style.display = 'grid';
+        document.getElementById('doubleExposureSizeRow').style.display = 'grid';
+        document.getElementById('doubleExposureApplyRow').style.display = 'flex';
+        doubleExposureStatus.textContent = 'Drag the dashed box to reposition the second photo, adjust blend mode/opacity/size, then tap Apply.';
+        render();
+    };
+    im.onerror = () => { doubleExposureStatus.textContent = '⚠️ Could not load that image file.'; };
+    im.src = URL.createObjectURL(file);
+    e.target.value = '';
+};
+
+document.getElementById('doubleExposureBlendMode').onchange = (e) => {
+    doubleExposureBlendMode = e.target.value;
+    render();
+};
+document.getElementById('doubleExposureOpacity').oninput = (e) => {
+    doubleExposureOpacityPct = Number(e.target.value);
+    document.getElementById('doubleExposureOpacityVal').textContent = e.target.value + '%';
+    render();
+};
+document.getElementById('doubleExposureSize').oninput = (e) => {
+    doubleExposureSizePct = Number(e.target.value);
+    document.getElementById('doubleExposureSizeVal').textContent = e.target.value + '%';
+    if(doubleExposureBaseRect && doubleExposureRect){
+        doubleExposureRect.w = doubleExposureBaseRect.w * (doubleExposureSizePct/100);
+        doubleExposureRect.h = doubleExposureBaseRect.h * (doubleExposureSizePct/100);
+        render();
+    }
+};
+
+function applyDoubleExposure(){
+    if(!doubleExposureImg || !doubleExposureRect){ doubleExposureStatus.textContent = '⚠️ Load a second photo first.'; return; }
+    // canvas already shows the correctly blended composite via render(), so
+    // just snapshot it -- same simple pattern as crop/erase/background removal
+    const out = document.createElement('canvas');
+    out.width = canvas.width; out.height = canvas.height;
+    out.getContext('2d').drawImage(canvas, 0, 0);
+    pendingLoad = {w: canvas.width, h: canvas.height};
+    img.src = out.toDataURL();
+    // Deliberately NOT calling cancelDoubleExposure() here: img.src just got
+    // reassigned, but that load is async -- the browser keeps drawing the OLD
+    // image until the new one finishes decoding. Resetting doubleExposureActive
+    // (and therefore triggering a render()) right now would draw a frame with
+    // the blend turned off but the new baked image not yet ready, i.e. a
+    // visible flash back to the plain original photo before the bake lands.
+    // The pendingLoad branch in img.onload calls cancelDoubleExposure() once
+    // the new image has actually finished loading, so the transition is clean.
+    doubleExposureStatus.textContent = 'Double exposure applied.';
+}
+
+function cancelDoubleExposure(showMessage){
+    doubleExposureActive = false;
+    doubleExposureImg = null;
+    doubleExposureRect = null;
+    doubleExposureBaseRect = null;
+    document.getElementById('doubleExposureBlendRow').style.display = 'none';
+    document.getElementById('doubleExposureOpacityRow').style.display = 'none';
+    document.getElementById('doubleExposureSizeRow').style.display = 'none';
+    document.getElementById('doubleExposureApplyRow').style.display = 'none';
+    if(showMessage !== false) doubleExposureStatus.textContent = 'Cancelled — back to the original photo.';
+    render();
+}
 
 // ---- Edge-snap: when you release a dragged corner/curve handle, it snaps
 // to the strongest nearby edge instead of sitting exactly where your finger
@@ -857,6 +1001,7 @@ img.onload = () => {
         state = JSON.parse(historyRestore.stateJSON);
         syncFilterSliders();
         shapeCropRect = null; // stale content-space coords if this step's photo is a different size
+        cancelDoubleExposure(false); // same reason -- a staged blend's coords/second-photo don't belong to whichever image we're restoring to
         const pushAfter = historyRestore.pushAfter;
         historyRestore = null;
         canvas.classList.add('ready');
@@ -873,6 +1018,7 @@ img.onload = () => {
         syncFilterSliders();
         pendingLoad = null;
         shapeCropRect = null; // stale content-space coords for a photo of the old size
+        cancelDoubleExposure(false); // ditto -- this bake just replaced the base photo entirely
     } else {
         canvas.width = img.width; canvas.height = img.height;
         showUploadStatus('');
@@ -888,6 +1034,7 @@ img.onload = () => {
         document.getElementById('textBehindHint').style.display = 'none';
         textBehindStatus.textContent = 'Tap "Detect Subject" first, then tap the canvas to place text — it\'ll be layered behind whatever the model identifies as the main subject. Use the color and font pickers above to style it.';
         shapeCropRect = null; // stale content-space coords for the previous photo
+        cancelDoubleExposure(false); // a brand new photo shouldn't inherit a blend staged on the old one
         // remember the ORIGINAL uploaded photo (post-downscale if that applied)
         // so Reset can always get all the way back to it, even after a crop,
         // background removal, or object erase has replaced the working image.
@@ -950,6 +1097,7 @@ function setMode(m){
     if(m==='shapeCrop' && canvas.classList.contains('ready') && !shapeCropRect){
         updateShapeCropSize(); // first-time-only init, centers on the canvas
     }
+    document.getElementById('doubleExposureTools').classList.toggle('active', m==='doubleExposure');
     document.getElementById('exifTools').classList.toggle('active', m==='exif');
     if(m==='filter') syncFilterSliders();
     // Only reset the crop box when actually switching INTO or OUT OF crop
@@ -1113,6 +1261,19 @@ function render(){
     // 1. Draw Image with filters
     drawBaseImageOn(ctx);
 
+    // 1b. Double Exposure blend layer -- sits on the photo itself, underneath
+    // drawings/text so those stay crisp. Persists across mode switches while
+    // staged (like the Background preview) so checking another tool doesn't
+    // lose it; only Apply/Cancel clear it.
+    if(doubleExposureActive && doubleExposureImg && doubleExposureRect){
+        ctx.save();
+        ctx.globalAlpha = doubleExposureOpacityPct/100;
+        ctx.globalCompositeOperation = doubleExposureBlendMode;
+        const r = doubleExposureRect;
+        ctx.drawImage(doubleExposureImg, r.cx-r.w/2, r.cy-r.h/2, r.w, r.h);
+        ctx.restore();
+    }
+
     // 2. Draw all paths, rendered per brush style
     drawStrokesOn(ctx);
 
@@ -1209,6 +1370,21 @@ function render(){
         ctx.strokeStyle = '#00ff88';
         ctx.lineWidth = Math.max(2, canvas.width*0.003);
         ctx.stroke();
+        ctx.restore();
+    }
+
+    // 7. Double Exposure positioning border -- only while actively in that
+    // tool (the blend itself, drawn back in step 1b, persists across mode
+    // switches; this outline is just a "here's what you're dragging" aid
+    // that would otherwise be invisible at low opacity or with some blend
+    // modes like Difference/Exclusion).
+    if(mode==='doubleExposure' && doubleExposureRect){
+        ctx.save();
+        const r = doubleExposureRect;
+        ctx.strokeStyle = '#00ff88';
+        ctx.setLineDash([canvas.width*0.01, canvas.width*0.006]);
+        ctx.lineWidth = Math.max(2, canvas.width*0.003);
+        ctx.strokeRect(r.cx-r.w/2, r.cy-r.h/2, r.w, r.h);
         ctx.restore();
     }
 

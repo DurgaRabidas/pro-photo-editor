@@ -8,8 +8,14 @@
     body {background:#121212; color:#eee; margin:0; font-family:system-ui; display:flex; flex-direction:column; height:100vh}
     h3 {text-align:center; margin:10px 0}
     #wrap {flex:1; min-height:140px; position:relative; background:#000; display:flex; justify-content:center; align-items:center; overflow:hidden}
-    canvas {position:absolute; max-width:100%; max-height:100%; touch-action:none; display:none}
-    canvas.ready {display:block}
+    #mainCanvas {position:absolute; max-width:100%; max-height:100%; touch-action:none; display:none}
+    #batchPreviewCanvas {position:absolute; max-width:100%; max-height:100%; display:none; background:#111; touch-action:none}
+    #batchPreviewCanvas.active {display:block}
+    #batchNavOverlay {position:absolute; bottom:14px; left:50%; transform:translateX(-50%); display:none; gap:12px; align-items:center; background:rgba(0,0,0,0.65); padding:8px 16px; border-radius:22px; z-index:20}
+    #batchNavOverlay.active {display:flex}
+    #batchNavOverlay button {padding:6px 16px; font-size:16px}
+    #batchNavCounter {color:#fff; font-size:13px; min-width:54px; text-align:center}
+    #mainCanvas.ready {display:block}
     #toolbar {background:#1f1f1f; padding:8px; display:flex; gap:8px; overflow-x:auto; border-top:1px solid #333}
     #subtools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:10px; max-height:42vh; overflow-y:auto}
     #subtools.active {display:flex}
@@ -61,6 +67,11 @@
     #doubleExposureTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px; max-height:42vh; overflow-y:auto}
     #doubleExposureTools.active {display:flex}
     #doubleExposureStatus {font-size:13px; color:#eee; background:#1a1a1a; padding:8px; border-radius:6px}
+    #batchTools {background:#2a2a2a; padding:10px; display:none; flex-direction:column; gap:8px; max-height:42vh; overflow-y:auto}
+    #batchTools.active {display:flex}
+    #batchStatus {font-size:13px; color:#eee; background:#1a1a1a; padding:8px; border-radius:6px}
+    #batchProgressWrap {background:#333; border-radius:6px; overflow:hidden; height:10px; display:none}
+    #batchProgressBar {background:#4CAF50; height:100%; width:0%; transition:width 0.15s}
     #scanStatus {font-size:13px; color:#eee; background:#1a1a1a; padding:8px; border-radius:6px}
     #bgApplyRow {display:none; flex-direction:column; gap:8px}
     #eraseTools.active {display:flex}
@@ -88,6 +99,7 @@
     <input type="file" id="upload" accept="image/*">
     <div id="uploadStatus"></div>
     <canvas id="mainCanvas"></canvas>
+    <canvas id="batchPreviewCanvas"></canvas>
     <div id="cropBox" class="crop-box"></div>
     <div id="cropHint">Drag to draw a crop box, then double-tap the ✂️ Crop button to apply</div>
     <div id="moveHint">Drag anywhere on the image to pan it</div>
@@ -327,6 +339,89 @@
     </div>
 </div>
 
+<div id="batchTools">
+    <div class="row">
+        <label for="batchFiles" id="batchFilesLabel" style="padding:8px 12px; background:#4CAF50; border-radius:8px; cursor:pointer">🖼️ Select photos (up to 100)</label>
+        <input type="file" id="batchFiles" accept="image/*" multiple class="visually-hidden-file">
+    </div>
+    <div id="batchFileCount" style="font-size:12px; color:#aaa"></div>
+    <div id="batchThumbGrid" style="display:flex; flex-wrap:nowrap; overflow-x:auto; scroll-snap-type:x mandatory; gap:10px; max-height:300px; background:#1a1a1a; padding:10px; border-radius:6px"></div>
+    <div style="font-size:11px; color:#888">Swipe/scroll sideways to flip through all selected photos ➡️</div>
+
+    <div class="row">
+        <label><input type="checkbox" id="batchResizeEnable"> Resize</label>
+        <input type="number" id="batchResizeMax" value="1920" min="50" max="8000" style="width:80px; padding:6px">
+        <span style="font-size:12px">px max dimension</span>
+    </div>
+
+    <div class="row">
+        <label><input type="checkbox" id="batchFilterEnable"> Filter</label>
+    </div>
+    <div class="filter-row">
+        <label for="batchBrightness">Brightness</label>
+        <input type="range" id="batchBrightness" min="0" max="200" value="100">
+        <span id="batchBrightnessVal">100%</span>
+    </div>
+    <div class="filter-row">
+        <label for="batchContrast">Contrast</label>
+        <input type="range" id="batchContrast" min="0" max="200" value="100">
+        <span id="batchContrastVal">100%</span>
+    </div>
+    <div class="filter-row">
+        <label for="batchSaturate">Saturation</label>
+        <input type="range" id="batchSaturate" min="0" max="200" value="100">
+        <span id="batchSaturateVal">100%</span>
+    </div>
+
+    <div class="row">
+        <label><input type="checkbox" id="batchWatermarkEnable"> Watermark text</label>
+    </div>
+    <div class="row">
+        <input type="text" id="batchWatermarkText" placeholder="Shop name / page name / caption" style="flex:1; min-width:150px; padding:8px; border-radius:6px; border:none">
+    </div>
+    <div class="filter-row">
+        <label for="batchWatermarkOpacity">Opacity</label>
+        <input type="range" id="batchWatermarkOpacity" min="10" max="100" value="60">
+        <span id="batchWatermarkOpacityVal">60%</span>
+    </div>
+    <div class="row">
+        <label for="batchWatermarkPos">Quick position:</label>
+        <select id="batchWatermarkPos">
+            <option value="br" selected>Bottom Right</option>
+            <option value="bl">Bottom Left</option>
+            <option value="tr">Top Right</option>
+            <option value="tl">Top Left</option>
+            <option value="center">Center</option>
+        </select>
+    </div>
+    <div class="filter-row">
+        <label for="batchWatermarkX">Horizontal (fine-tune)</label>
+        <input type="range" id="batchWatermarkX" min="0" max="100" value="85">
+        <span id="batchWatermarkXVal">85%</span>
+    </div>
+    <div class="filter-row">
+        <label for="batchWatermarkY">Vertical (fine-tune)</label>
+        <input type="range" id="batchWatermarkY" min="0" max="100" value="92">
+        <span id="batchWatermarkYVal">92%</span>
+    </div>
+    <div class="filter-row">
+        <label for="batchWatermarkSize">Size</label>
+        <input type="range" id="batchWatermarkSize" min="30" max="300" value="100">
+        <span id="batchWatermarkSizeVal">100%</span>
+    </div>
+    <div class="filter-row">
+        <label for="batchWatermarkAngle">Angle</label>
+        <input type="range" id="batchWatermarkAngle" min="-180" max="180" value="0">
+        <span id="batchWatermarkAngleVal">0°</span>
+    </div>
+
+    <div id="batchStatus">Select up to 100 photos -- tap any thumbnail to preview it big above. If a watermark is on, you can drag it right there on the big preview to reposition it (applies to the whole batch). Tap ✕ on any thumbnail to drop it from the batch.</div>
+    <div id="batchProgressWrap"><div id="batchProgressBar"></div></div>
+    <div class="row">
+        <button id="btnBatchProcess" onclick="processBatch()">⚙️ Process &amp; Download ZIP</button>
+    </div>
+</div>
+
 <div id="exifTools">
     <div id="exifSaveNote">
         ℹ️ Note: everything you export with the 💾 Save button in this editor is already
@@ -349,6 +444,7 @@
     <button id="btnErase" onclick="setMode('erase')">🧹 Object Eraser</button>
     <button id="btnScan" onclick="setMode('scan')">📄 Document Scanner</button>
     <button id="btnShapeCrop" onclick="setMode('shapeCrop')">🔷 Shape Crop</button>
+    <button id="btnBatch" onclick="setMode('batch')">📦 Batch Editor</button>
     <button id="btnDoubleExposure" onclick="setMode('doubleExposure')">🌗 Double Exposure</button>
     <button id="btnExif" onclick="setMode('exif')">🔎 EXIF Info</button>
     <button onclick="undo()">↩️ Undo</button>
@@ -1098,6 +1194,21 @@ function setMode(m){
         updateShapeCropSize(); // first-time-only init, centers on the canvas
     }
     document.getElementById('doubleExposureTools').classList.toggle('active', m==='doubleExposure');
+    document.getElementById('batchTools').classList.toggle('active', m==='batch');
+    document.getElementById('batchPreviewCanvas').classList.toggle('active', m==='batch');
+    // Hide the main editor canvas AND the "Choose Image" label while batch-
+    // previewing -- both would otherwise sit underneath/on top of the batch
+    // preview (the label especially, since it's still visible whenever no
+    // main photo has been loaded, which is the normal case if someone's
+    // using Batch Editor as a standalone tool). Clearing the inline override
+    // on leaving batch mode lets each element's own existing visibility
+    // logic resume control exactly as it was.
+    document.getElementById('mainCanvas').style.display = (m === 'batch') ? 'none' : '';
+    if(m === 'batch'){
+        document.getElementById('upload-label').style.display = 'none';
+    } else {
+        document.getElementById('upload-label').style.display = canvas.classList.contains('ready') ? 'none' : 'block';
+    }
     document.getElementById('exifTools').classList.toggle('active', m==='exif');
     if(m==='filter') syncFilterSliders();
     // Only reset the crop box when actually switching INTO or OUT OF crop
@@ -1233,6 +1344,15 @@ function drawTextSelectionBox(t){
 }
 
 function render(){
+    // Batch Editor takes over the whole canvas area with its own big preview
+    // canvas instead of the main editor's -- there's nothing from the main
+    // photo/state to draw while you're working on a completely separate set
+    // of batch files.
+    if(mode === 'batch'){
+        renderBatchBigPreview();
+        return;
+    }
+
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
     // While a background-removal preview is active, it takes over the whole
@@ -2472,6 +2592,485 @@ function loadScript(src, errorMessage){
         s.onerror = () => reject(new Error(errorMessage || 'Could not load a required script from the CDN — check your internet connection and try again.'));
         document.head.appendChild(s);
     });
+}
+
+// ---- Batch Editor ----
+// Deliberately independent of the main editor's canvas/img/state/undo-history
+// -- it's a separate job over a separate set of files, so it can't
+// accidentally interact with (or be broken by) whatever you're doing in the
+// main editor above. Ships results as a ZIP since downloading up to 100
+// individual files one at a time isn't realistic; JSZip is loaded on demand,
+// same "needs internet the first time" tradeoff as the other libraries.
+//
+// batchItems holds {file, thumbCanvas, displayCanvas, id} -- deliberately NOT
+// the full decoded Image for all 100 photos at once (that could be a huge
+// memory footprint on a phone). Each file's full image is only decoded
+// briefly to build a small filmstrip thumbnail, then released; the File
+// itself (cheap, just a reference) is re-read later, one at a time -- either
+// at full resolution for whichever single photo is the current big preview,
+// or when you run Process & Download.
+let batchItems = [];
+let batchSelectedIndex = -1;   // which item shows in the big preview (on the main canvas area)
+let batchBigPreviewImg = null; // full-res image for ONLY the currently selected item
+let batchBigPreviewForId = null;
+
+document.getElementById('batchFiles').onchange = async (e) => {
+    const all = Array.from(e.target.files).slice(0, 100);
+    const overflowNote = e.target.files.length > 100 ? ` (${e.target.files.length} chosen, capped at 100)` : '';
+    e.target.value = '';
+
+    batchItems = [];
+    batchSelectedIndex = -1; batchBigPreviewImg = null; batchBigPreviewForId = null;
+    document.getElementById('batchThumbGrid').innerHTML = '';
+    document.getElementById('batchFileCount').textContent = 'Loading previews…';
+
+    const THUMB = 130; // target size for the longer side
+    const MIN_THUMB_SIDE = 70; // minimum for the SHORTER side -- without this, a very tall/narrow photo (a phone screenshot, say) scales down to a razor-thin sliver that the remove button then completely dominates
+    for(const file of all){
+        try{
+            const im = await loadImageFromFile(file);
+            let scale = THUMB / Math.max(im.naturalWidth, im.naturalHeight);
+            let tw = Math.max(1, Math.round(im.naturalWidth*scale));
+            let th = Math.max(1, Math.round(im.naturalHeight*scale));
+            const shorterSide = Math.min(tw, th);
+            if(shorterSide < MIN_THUMB_SIDE){
+                scale *= MIN_THUMB_SIDE / shorterSide;
+                tw = Math.max(1, Math.round(im.naturalWidth*scale));
+                th = Math.max(1, Math.round(im.naturalHeight*scale));
+            }
+            const thumbCanvas = document.createElement('canvas');
+            thumbCanvas.width = tw; thumbCanvas.height = th;
+            thumbCanvas.getContext('2d').drawImage(im, 0, 0, tw, th);
+            URL.revokeObjectURL(im.src); // done with the full decode -- only the small thumbnail stays in memory
+
+            const item = {file, thumbCanvas, id: Math.random().toString(36).slice(2)};
+            batchItems.push(item);
+            addBatchThumbToGrid(item);
+        } catch(err){
+            console.error('Could not load', file.name, err);
+        }
+    }
+    document.getElementById('batchFileCount').textContent = batchItems.length + ' photo(s) loaded' + overflowNote;
+    if(batchItems.length > 0) selectBatchItemForPreview(0);
+};
+
+function addBatchThumbToGrid(item){
+    const w = item.thumbCanvas.width, h = item.thumbCanvas.height;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = `position:relative; width:${w}px; height:${h}px; flex:none; scroll-snap-align:center; border-radius:6px; overflow:hidden; border:2px solid transparent; cursor:pointer`;
+    wrap.dataset.itemId = item.id;
+
+    const displayCanvas = document.createElement('canvas');
+    displayCanvas.width = w;
+    displayCanvas.height = h;
+    displayCanvas.style.cssText = 'width:100%; height:100%; background:#000; display:block';
+    item.displayCanvas = displayCanvas;
+    wrap.appendChild(displayCanvas);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.textContent = '✕';
+    removeBtn.title = 'Remove from batch';
+    const btnSize = Math.max(16, Math.min(20, Math.round(w * 0.28))); // proportional, so it can't dominate a narrow card
+    removeBtn.style.cssText = `position:absolute; top:2px; right:2px; width:${btnSize}px; height:${btnSize}px; border-radius:50%; background:#f44336; color:#fff; border:none; font-size:${Math.round(btnSize*0.55)}px; line-height:1; padding:0; cursor:pointer; z-index:1`;
+    removeBtn.onclick = (ev) => {
+        ev.stopPropagation(); // don't also trigger the wrap's select-this-photo click
+        const removedIdx = batchItems.findIndex(i => i.id === item.id);
+        batchItems = batchItems.filter(i => i.id !== item.id);
+        wrap.remove();
+        document.getElementById('batchFileCount').textContent = batchItems.length + ' photo(s) loaded';
+        if(batchItems.length === 0){
+            batchSelectedIndex = -1; batchBigPreviewImg = null; batchBigPreviewForId = null;
+            render();
+        } else if(removedIdx === batchSelectedIndex){
+            selectBatchItemForPreview(Math.min(removedIdx, batchItems.length-1));
+        } else if(removedIdx < batchSelectedIndex){
+            batchSelectedIndex--; // keep pointing at the same photo, whose index just shifted down
+        }
+    };
+    wrap.appendChild(removeBtn);
+
+    wrap.onclick = () => {
+        const idx = batchItems.findIndex(i => i.id === item.id);
+        if(idx >= 0) selectBatchItemForPreview(idx);
+    };
+
+    document.getElementById('batchThumbGrid').appendChild(wrap);
+    drawThumbPreview(item);
+}
+
+// Redraws one thumbnail with the CURRENT filter/watermark settings --
+// Loads ONE photo at full resolution for the big preview -- deliberately only
+// one at a time (not all 100), so this stays cheap on memory. Renders onto
+// #batchPreviewCanvas at the photo's native resolution; the CSS max-width/
+// max-height then scales it down for display, same as the main editor's own
+// canvas, so it looks sharp rather than a blown-up thumbnail.
+async function selectBatchItemForPreview(index){
+    batchSelectedIndex = index;
+    refreshBatchSelectionHighlight();
+    const item = batchItems[index];
+    if(!item) return;
+    batchBigPreviewImg = null;
+    batchBigPreviewForId = item.id;
+    if(mode === 'batch') render(); // shows a "Loading…" placeholder immediately
+    try{
+        const im = await loadImageFromFile(item.file);
+        if(batchBigPreviewForId !== item.id) { URL.revokeObjectURL(im.src); return; } // selection changed again while this was loading
+        batchBigPreviewImg = im;
+    } catch(err){
+        console.error('Could not load full preview for', item.file.name, err);
+    }
+    if(mode === 'batch') render();
+}
+
+function refreshBatchSelectionHighlight(){
+    const selectedId = batchItems[batchSelectedIndex]?.id;
+    document.querySelectorAll('#batchThumbGrid > div').forEach(el => {
+        el.style.borderColor = (el.dataset.itemId === selectedId) ? '#4CAF50' : 'transparent';
+    });
+}
+
+function renderBatchBigPreview(){
+    const bc = document.getElementById('batchPreviewCanvas');
+    const bctx = bc.getContext('2d');
+    if(batchItems.length === 0 || !batchBigPreviewImg){
+        bc.width = 480; bc.height = 320;
+        bctx.clearRect(0, 0, bc.width, bc.height);
+        bctx.fillStyle = '#888';
+        bctx.font = '20px Arial';
+        bctx.textAlign = 'center';
+        bctx.fillText(
+            batchItems.length === 0 ? 'Select photos below to preview them here' : 'Loading preview…',
+            bc.width/2, bc.height/2
+        );
+        bctx.textAlign = 'left';
+        return;
+    }
+    const im = batchBigPreviewImg;
+    bc.width = im.naturalWidth;
+    bc.height = im.naturalHeight;
+    if(document.getElementById('batchFilterEnable').checked){
+        const b = document.getElementById('batchBrightness').value;
+        const c = document.getElementById('batchContrast').value;
+        const s = document.getElementById('batchSaturate').value;
+        bctx.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%)`;
+    }
+    bctx.drawImage(im, 0, 0);
+    bctx.filter = 'none';
+    if(document.getElementById('batchWatermarkEnable').checked){
+        const wm = getBatchWatermarkParams();
+        drawBatchWatermark(bctx, bc.width, bc.height, wm.text, wm.opacity, wm.x, wm.y, wm.size, wm.angle);
+    }
+}
+
+// Reads all the current watermark control values in one place, so every
+// caller (big preview, thumbnail preview, final export) stays in sync
+// automatically instead of each reading the DOM separately.
+function getBatchWatermarkParams(){
+    return {
+        text: document.getElementById('batchWatermarkText').value.trim(),
+        opacity: Number(document.getElementById('batchWatermarkOpacity').value),
+        x: Number(document.getElementById('batchWatermarkX').value),
+        y: Number(document.getElementById('batchWatermarkY').value),
+        size: Number(document.getElementById('batchWatermarkSize').value),
+        angle: Number(document.getElementById('batchWatermarkAngle').value),
+    };
+}
+
+// Redraws one thumbnail with the CURRENT filter/watermark settings applied --
+// reuses the exact same drawBatchWatermark() call the real export uses, so
+// what you see in the strip matches what you'll actually get, just smaller.
+function drawThumbPreview(item){
+    if(!item.displayCanvas) return;
+    const w = item.thumbCanvas.width, h = item.thumbCanvas.height;
+    const ctx = item.displayCanvas.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+    if(document.getElementById('batchFilterEnable').checked){
+        const b = document.getElementById('batchBrightness').value;
+        const c = document.getElementById('batchContrast').value;
+        const s = document.getElementById('batchSaturate').value;
+        ctx.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%)`;
+    }
+    ctx.drawImage(item.thumbCanvas, 0, 0);
+    ctx.filter = 'none';
+    if(document.getElementById('batchWatermarkEnable').checked){
+        const wm = getBatchWatermarkParams();
+        drawBatchWatermark(ctx, w, h, wm.text, wm.opacity, wm.x, wm.y, wm.size, wm.angle);
+    }
+}
+// The strip thumbnails are just for browsing/selecting -- only the big
+// preview (the one photo you're actually looking at) needs to update live.
+// Redrawing up to 100 thumbnail canvases on every slider tick was both
+// unnecessary now that the big canvas exists, and the more expensive of the
+// two (that canvas can be at full photo resolution, e.g. several megapixels,
+// where ctx.filter is genuinely slow) -- but it was ALSO the only thing this
+// function updated, so the big preview was going stale while you dragged a
+// slider. This fixes both: cheaper, and actually live where it matters.
+function updateBatchPreviews(){
+    renderBatchBigPreview();
+}
+// Debounced version for slider dragging -- redrawing potentially 100 big
+// (260px) canvases on every single 'input' event during a drag would make
+// the slider feel laggy; waiting a moment after the last change keeps it
+// responsive while still feeling live.
+let batchPreviewDebounceTimer = null;
+function scheduleBatchPreviewUpdate(){
+    clearTimeout(batchPreviewDebounceTimer);
+    batchPreviewDebounceTimer = setTimeout(updateBatchPreviews, 80);
+}
+
+['batchBrightness','batchContrast','batchSaturate'].forEach(id => {
+    document.getElementById(id).oninput = (e) => {
+        document.getElementById(id+'Val').textContent = e.target.value + '%';
+        scheduleBatchPreviewUpdate();
+    };
+});
+document.getElementById('batchWatermarkOpacity').oninput = (e) => {
+    document.getElementById('batchWatermarkOpacityVal').textContent = e.target.value + '%';
+    scheduleBatchPreviewUpdate();
+};
+document.getElementById('batchWatermarkX').oninput = (e) => {
+    document.getElementById('batchWatermarkXVal').textContent = e.target.value + '%';
+    scheduleBatchPreviewUpdate();
+};
+document.getElementById('batchWatermarkY').oninput = (e) => {
+    document.getElementById('batchWatermarkYVal').textContent = e.target.value + '%';
+    scheduleBatchPreviewUpdate();
+};
+document.getElementById('batchWatermarkSize').oninput = (e) => {
+    document.getElementById('batchWatermarkSizeVal').textContent = e.target.value + '%';
+    scheduleBatchPreviewUpdate();
+};
+document.getElementById('batchWatermarkAngle').oninput = (e) => {
+    document.getElementById('batchWatermarkAngleVal').textContent = e.target.value + '°';
+    scheduleBatchPreviewUpdate();
+};
+document.getElementById('batchFilterEnable').onchange = updateBatchPreviews;
+document.getElementById('batchWatermarkEnable').onchange = updateBatchPreviews;
+document.getElementById('batchWatermarkText').oninput = scheduleBatchPreviewUpdate;
+// Quick position is a shortcut that sets the fine-tune X/Y sliders to a
+// matching spot -- picking one doesn't lock you out of adjusting further,
+// it's just a fast starting point (inset a bit from the true edges so
+// normal-length watermark text doesn't clip off the photo).
+const BATCH_WATERMARK_PRESETS = {
+    br: {x:88, y:92}, bl: {x:12, y:92}, tr: {x:88, y:8}, tl: {x:12, y:8}, center: {x:50, y:50}
+};
+document.getElementById('batchWatermarkPos').onchange = (e) => {
+    const preset = BATCH_WATERMARK_PRESETS[e.target.value];
+    if(preset){
+        document.getElementById('batchWatermarkX').value = preset.x;
+        document.getElementById('batchWatermarkXVal').textContent = preset.x + '%';
+        document.getElementById('batchWatermarkY').value = preset.y;
+        document.getElementById('batchWatermarkYVal').textContent = preset.y + '%';
+    }
+    updateBatchPreviews();
+};
+
+// ---- Drag the watermark by hand on the big preview canvas ----
+// Works on whichever photo is currently big-previewed, but writes to the
+// same global X/Y sliders that apply to the whole batch -- the watermark
+// position is one shared setting across all photos, not per-photo, so
+// dragging it while looking at any one of them repositions it for all.
+let batchWatermarkDragging = false;
+
+function batchPointerXY(e){
+    if(e.touches && e.touches.length) return {x: e.touches[0].clientX, y: e.touches[0].clientY};
+    if(e.changedTouches && e.changedTouches.length) return {x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY};
+    return {x: e.clientX, y: e.clientY};
+}
+function getBatchCanvasPos(clientX, clientY){
+    const bc = document.getElementById('batchPreviewCanvas');
+    const rect = bc.getBoundingClientRect();
+    const scaleX = bc.width / rect.width;
+    const scaleY = bc.height / rect.height;
+    return {x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY};
+}
+function batchWatermarkHitTest(pos, bc){
+    if(!document.getElementById('batchWatermarkEnable').checked) return false;
+    const wm = getBatchWatermarkParams();
+    if(!wm.text) return false;
+    const anchorX = bc.width * (wm.x/100);
+    const anchorY = bc.height * (wm.y/100);
+    const fontSize = Math.max(8, Math.round(Math.min(bc.width, bc.height) * 0.045 * (wm.size/100)));
+    const hitRadius = Math.max(fontSize*1.3, bc.width*0.06); // generous -- easy to grab on a touchscreen, scales with text size and photo size
+    return Math.hypot(pos.x-anchorX, pos.y-anchorY) < hitRadius;
+}
+function batchPreviewPointerDown(e){
+    if(mode !== 'batch') return;
+    const bc = document.getElementById('batchPreviewCanvas');
+    if(!bc.width || batchItems.length === 0) return;
+    const {x:clientX, y:clientY} = batchPointerXY(e);
+    const pos = getBatchCanvasPos(clientX, clientY);
+    if(batchWatermarkHitTest(pos, bc)){
+        e.preventDefault();
+        batchWatermarkDragging = true;
+    }
+}
+function batchPreviewPointerMove(e){
+    if(!batchWatermarkDragging) return;
+    e.preventDefault();
+    const bc = document.getElementById('batchPreviewCanvas');
+    const {x:clientX, y:clientY} = batchPointerXY(e);
+    const pos = getBatchCanvasPos(clientX, clientY);
+    const xPct = Math.round(Math.max(0, Math.min(100, (pos.x/bc.width)*100)));
+    const yPct = Math.round(Math.max(0, Math.min(100, (pos.y/bc.height)*100)));
+    document.getElementById('batchWatermarkX').value = xPct;
+    document.getElementById('batchWatermarkXVal').textContent = xPct + '%';
+    document.getElementById('batchWatermarkY').value = yPct;
+    document.getElementById('batchWatermarkYVal').textContent = yPct + '%';
+    renderBatchBigPreview(); // cheap redraw from the already-loaded image, safe to call every move
+}
+function batchPreviewPointerUp(){
+    batchWatermarkDragging = false;
+}
+const batchPreviewCanvasEl = document.getElementById('batchPreviewCanvas');
+batchPreviewCanvasEl.addEventListener('mousedown', batchPreviewPointerDown);
+batchPreviewCanvasEl.addEventListener('mousemove', batchPreviewPointerMove);
+window.addEventListener('mouseup', batchPreviewPointerUp);
+batchPreviewCanvasEl.addEventListener('touchstart', batchPreviewPointerDown, {passive:false});
+batchPreviewCanvasEl.addEventListener('touchmove', batchPreviewPointerMove, {passive:false});
+batchPreviewCanvasEl.addEventListener('touchend', batchPreviewPointerUp, {passive:false});
+batchPreviewCanvasEl.addEventListener('touchcancel', batchPreviewPointerUp, {passive:false});
+
+let jszipLoadingPromise = null;
+function ensureJSZip(){
+    if(typeof JSZip !== 'undefined') return Promise.resolve();
+    if(jszipLoadingPromise) return jszipLoadingPromise;
+    jszipLoadingPromise = loadScript('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
+        'Could not load the ZIP packaging library from the CDN — check your internet connection and try again.');
+    return jszipLoadingPromise;
+}
+
+function loadImageFromFile(file){
+    return new Promise((resolve, reject) => {
+        const im = new Image();
+        im.onload = () => resolve(im);
+        im.onerror = () => reject(new Error('Could not load ' + file.name + ' -- it may not be a valid image file.'));
+        im.src = URL.createObjectURL(file);
+    });
+}
+
+function drawBatchWatermark(ctx, w, h, text, opacityPct, xPct, yPct, sizePct, angleDeg){
+    if(!text) return;
+    const fontSize = Math.max(8, Math.round(Math.min(w,h) * 0.045 * (sizePct/100)));
+    ctx.save();
+    ctx.font = `bold ${fontSize}px Arial`;
+    ctx.globalAlpha = opacityPct/100;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // Position is the CENTER of the text, so size/angle changes stay anchored
+    // to the same spot instead of drifting as the text grows or rotates.
+    ctx.translate(w * (xPct/100), h * (yPct/100));
+    ctx.rotate(angleDeg * Math.PI/180);
+    ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+    ctx.lineWidth = Math.max(1, fontSize*0.08);
+    ctx.strokeText(text, 0, 0);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
+}
+
+async function processBatch(){
+    const statusEl = document.getElementById('batchStatus');
+    if(batchItems.length === 0){
+        statusEl.textContent = '⚠️ Select at least one photo first.';
+        return;
+    }
+
+    const resizeEnabled = document.getElementById('batchResizeEnable').checked;
+    const resizeMax = Math.max(50, Number(document.getElementById('batchResizeMax').value) || 1920);
+    const filterEnabled = document.getElementById('batchFilterEnable').checked;
+    const brightness = Number(document.getElementById('batchBrightness').value);
+    const contrast = Number(document.getElementById('batchContrast').value);
+    const saturate = Number(document.getElementById('batchSaturate').value);
+    const watermarkEnabled = document.getElementById('batchWatermarkEnable').checked;
+    const wm = getBatchWatermarkParams();
+
+    const btn = document.getElementById('btnBatchProcess');
+    const progressWrap = document.getElementById('batchProgressWrap');
+    const progressBar = document.getElementById('batchProgressBar');
+    btn.disabled = true;
+    progressWrap.style.display = 'block';
+    progressBar.style.width = '0%';
+
+    let succeeded = 0, failed = 0;
+    try{
+        statusEl.textContent = 'Preparing ZIP packager…';
+        await ensureJSZip();
+        const zip = new JSZip();
+        const usedNames = new Set();
+
+        for(let i=0; i<batchItems.length; i++){
+            const file = batchItems[i].file;
+            statusEl.textContent = `Processing ${i+1}/${batchItems.length}: ${file.name}`;
+            progressBar.style.width = Math.round((i/batchItems.length)*100) + '%';
+
+            let objectUrl = null;
+            try{
+                const im = await loadImageFromFile(file);
+                objectUrl = im.src;
+                let w = im.naturalWidth, h = im.naturalHeight;
+                if(resizeEnabled && Math.max(w,h) > resizeMax){
+                    const s = resizeMax / Math.max(w,h);
+                    w = Math.max(1, Math.round(w*s));
+                    h = Math.max(1, Math.round(h*s));
+                }
+                const c = document.createElement('canvas');
+                c.width = w; c.height = h;
+                const cctx = c.getContext('2d');
+                if(filterEnabled){
+                    cctx.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturate}%)`;
+                }
+                cctx.drawImage(im, 0, 0, w, h);
+                cctx.filter = 'none';
+                if(watermarkEnabled && wm.text){
+                    drawBatchWatermark(cctx, w, h, wm.text, wm.opacity, wm.x, wm.y, wm.size, wm.angle);
+                }
+                const blob = await new Promise(resolve => c.toBlob(resolve, 'image/jpeg', 0.9));
+
+                let baseName = file.name.replace(/\.[^./\\]+$/, '') || `photo-${i+1}`;
+                let outName = `${baseName}-edited.jpg`;
+                let dupeSuffix = 2;
+                while(usedNames.has(outName)){ outName = `${baseName}-edited-${dupeSuffix++}.jpg`; }
+                usedNames.add(outName);
+
+                zip.file(outName, blob);
+                succeeded++;
+            } catch(err){
+                failed++;
+                console.error('Batch item failed:', file.name, err);
+                // keep going -- one bad file shouldn't sink the whole batch
+            } finally {
+                if(objectUrl) URL.revokeObjectURL(objectUrl);
+            }
+
+            // yield to the browser between photos so progress text/bar actually paint and the tab stays responsive
+            await new Promise(r => setTimeout(r, 0));
+        }
+
+        progressBar.style.width = '100%';
+        if(succeeded === 0){
+            statusEl.textContent = '⚠️ None of the selected files could be processed.';
+            return;
+        }
+
+        statusEl.textContent = 'Packaging ZIP…';
+        const zipBlob = await zip.generateAsync({type:'blob'});
+        const link = document.createElement('a');
+        link.download = 'batch-edited-photos.zip';
+        link.href = URL.createObjectURL(zipBlob);
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+
+        statusEl.textContent = failed > 0
+            ? `Done — ${succeeded} photo(s) processed and downloaded as a ZIP (${failed} file(s) failed and were skipped).`
+            : `Done — ${succeeded} photo(s) processed and downloaded as a ZIP.`;
+    } catch(err){
+        statusEl.textContent = '⚠️ Batch processing failed: ' + err.message;
+        console.error('Batch processing error:', err);
+    } finally {
+        btn.disabled = false;
+        progressWrap.style.display = 'none';
+    }
 }
 
 async function ensureSegmentation(){

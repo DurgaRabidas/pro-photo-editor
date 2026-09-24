@@ -345,7 +345,7 @@
         <input type="file" id="batchFiles" accept="image/*" multiple class="visually-hidden-file">
     </div>
     <div id="batchFileCount" style="font-size:12px; color:#aaa"></div>
-    <div id="batchThumbGrid" style="display:flex; flex-wrap:nowrap; overflow-x:auto; scroll-snap-type:x mandatory; gap:300px; max-height:300px; background:#1a1a1a; padding:10px; border-radius:6px"></div>
+    <div id="batchThumbGrid" style="display:flex; flex-wrap:nowrap; overflow-x:auto; scroll-snap-type:x mandatory; gap:10px; height:230px; flex-shrink:0; background:#1a1a1a; padding:10px; border-radius:6px; box-sizing:border-box"></div>
     <div style="font-size:11px; color:#888">Swipe/scroll sideways to flip through all selected photos ➡️</div>
 
     <div class="row">
@@ -2624,8 +2624,8 @@ document.getElementById('batchFiles').onchange = async (e) => {
     document.getElementById('batchThumbGrid').innerHTML = '';
     document.getElementById('batchFileCount').textContent = 'Loading previews…';
 
-    const THUMB = 130; // target size for the longer side
-    const MIN_THUMB_SIDE = 70; // minimum for the SHORTER side -- without this, a very tall/narrow photo (a phone screenshot, say) scales down to a razor-thin sliver that the remove button then completely dominates
+    const THUMB = 200; // target size for the longer side
+    const MIN_THUMB_SIDE = 150; // minimum for the SHORTER side -- this is what actually guarantees visibility: a wide/landscape or very tall/narrow photo would otherwise scale its shorter side down to something too thin to make out clearly
     for(const file of all){
         try{
             const im = await loadImageFromFile(file);
